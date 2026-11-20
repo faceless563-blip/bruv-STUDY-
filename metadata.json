@@ -1,0 +1,6 @@
+{
+  "name": "YPT Desktop — Study Timer & Tracker",
+  "description": "Desktop edition of YPT (Yeolpumta) study timer and tracker: per-subject stopwatches, Pomodoro mode, 10-minute planner, flame heatmap insights, D-Day countdowns, study groups, and category rankings.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
