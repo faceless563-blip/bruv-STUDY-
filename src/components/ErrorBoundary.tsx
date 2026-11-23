@@ -1,5 +1,6 @@
 import React from 'react';
-import { AlertTriangle, RotateCcw } from 'lucide-react';
+import { AlertTriangle, LogOut, RotateCcw } from 'lucide-react';
+import { signOutUser } from '../firebase';
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -44,6 +45,15 @@ export class ErrorBoundary extends React.Component<
         // use raw message
       }
 
+      const handleSignOutAndReload = async () => {
+        try {
+          await signOutUser();
+        } catch {
+          // ignore
+        }
+        window.location.reload();
+      };
+
       return (
         <div className="min-h-screen bg-[#F8F9FA] dark:bg-[#0B0D11] text-neutral-900 dark:text-neutral-100 flex items-center justify-center p-6">
           <div className="max-w-md w-full rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#14171D] p-6 space-y-4 shadow-sm">
@@ -56,14 +66,26 @@ export class ErrorBoundary extends React.Component<
             <p className="text-xs text-neutral-600 dark:text-neutral-400 break-words font-mono bg-neutral-50 dark:bg-neutral-900 p-3 rounded-lg border border-neutral-200 dark:border-neutral-800">
               {parsedDetail}
             </p>
-            <button
-              type="button"
-              onClick={() => window.location.reload()}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-xs font-medium cursor-pointer"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Reload Bruv-study</span>
-            </button>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-xs font-medium cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Reload Bruv-study</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void handleSignOutAndReload();
+                }}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800 text-xs font-medium text-neutral-700 dark:text-neutral-200 cursor-pointer"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Sign Out &amp; Continue Locally</span>
+              </button>
+            </div>
           </div>
         </div>
       );

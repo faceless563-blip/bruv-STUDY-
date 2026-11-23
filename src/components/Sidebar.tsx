@@ -30,6 +30,7 @@ interface SidebarProps {
   isFocusing: boolean;
   authUser: { uid: string; email: string | null; displayName: string | null } | null;
   authReady: boolean;
+  isSigningIn?: boolean;
   onSignIn: () => void;
   onSignOut: () => void;
 }
@@ -57,6 +58,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isFocusing,
   authUser,
   authReady,
+  isSigningIn = false,
   onSignIn,
   onSignOut,
 }) => {
@@ -188,11 +190,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {authReady && !authUser && (
             <button
               type="button"
+              disabled={isSigningIn}
               onClick={onSignIn}
-              className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800 text-xs font-medium text-neutral-700 dark:text-neutral-200 transition-colors cursor-pointer"
+              className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800 disabled:opacity-60 text-xs font-medium text-neutral-700 dark:text-neutral-200 transition-colors cursor-pointer disabled:cursor-wait"
             >
               <LogIn className="w-3.5 h-3.5 text-orange-500" />
-              <span>Sign in with Google</span>
+              <span>{isSigningIn ? 'Signing in...' : 'Sign in with Google'}</span>
             </button>
           )}
 

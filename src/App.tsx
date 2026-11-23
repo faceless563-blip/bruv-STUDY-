@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { auth, signInWithGoogle, signOutUser } from './firebase';
+import {
+  auth,
+  FIREBASE_PROJECT_ID,
+  isEmbeddedIframe,
+  resolveGoogleRedirectResult,
+  signInWithGoogle,
+  signOutUser,
+} from './firebase';
 import {
   cheerGroupMissionDoc,
   createSessionDoc,
@@ -33,6 +40,8 @@ import { VaultView } from './components/VaultView';
 import { UnlockModal } from './components/UnlockModal';
 import { QuickStartModal } from './components/QuickStartModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
+import { AuthErrorModal } from './components/AuthErrorModal';
+import { ParsedAuthError, parseFirebaseAuthError } from './utils/authErrorLogic';
 import { createDefaultWallet, createEmptyState } from './data/seedData';
 import {
   AccentTheme,
@@ -101,6 +110,8 @@ export default function App() {
     displayName: string | null;
   } | null>(null);
   const [authReady, setAuthReady] = useState(false);
+  const [isSigningIn, setIsSigningIn] = useState(false);
+  const [authError, setAuthError] = useState<ParsedAuthError | null>(null);
   const [syncError, setSyncError] = useState<Error | null>(null);
 
   if (syncError) {
@@ -130,6 +141,20 @@ export default function App() {
     let unsubFirestore: (() => void) | null = null;
     let cancelled = false;
 
+    if (!isEmbeddedIframe()) {
+      void resolveGoogleRedirectResult().catch((err) => {
+        if (cancelled) return;
+        const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+        setAuthError(
+          parseFirebaseAuthError(err, {
+            hostname,
+            inIframe: false,
+            firebaseProjectId: FIREBASE_PROJECT_ID,
+          })
+        );
+      });
+    }
+
     const unsubAuth = onAuthStateChanged(auth, async (user: User | null) => {
       if (unsubFirestore) {
         unsubFirestore();
@@ -145,6 +170,8 @@ export default function App() {
       }
 
       if (!cancelled) {
+        setAuthError(null);
+        setIsSigningIn(false);
         setAuthUser({
           uid: user.uid,
           email: user.email,
@@ -319,13 +346,28 @@ export default function App() {
     streakDays,
   ]);
 
-  const handleSignIn = () => {
-    void signInWithGoogle().catch((err) => {
-      console.error('Google sign-in error:', err);
-    });
+  const handleSignIn = async () => {
+    if (isSigningIn) return;
+    setAuthError(null);
+    setIsSigningIn(true);
+    try {
+      await signInWithGoogle();
+    } catch (err) {
+      const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+      const parsed = parseFirebaseAuthError(err, {
+        hostname,
+        inIframe: isEmbeddedIframe(),
+        firebaseProjectId: FIREBASE_PROJECT_ID,
+      });
+      console.error('Google sign-in error:', parsed.code, err);
+      setAuthError(parsed);
+    } finally {
+      setIsSigningIn(false);
+    }
   };
 
   const handleSignOut = () => {
+    setAuthError(null);
     void signOutUser().then(() => {
       setActiveSubjectId(null);
       setSessionStartMs(null);
@@ -835,6 +877,7 @@ export default function App() {
         isFocusing={Boolean(activeSubject)}
         authUser={authUser}
         authReady={authReady}
+        isSigningIn={isSigningIn}
         onSignIn={handleSignIn}
         onSignOut={handleSignOut}
       />
@@ -967,6 +1010,8 @@ export default function App() {
               onToggleTheme={handleToggleTheme}
               onResetAllData={handleResetAllData}
               authUser={authUser}
+              isSigningIn={isSigningIn}
+              authError={authError}
               onSignIn={handleSignIn}
               onSignOut={handleSignOut}
             />
@@ -1013,6 +1058,16 @@ export default function App() {
           onClose={() => setUnlockPackId(null)}
           onUnlockWithCoins={handleUnlockPack}
           onOpenChallenges={() => setActiveTab('vault')}
+        />
+      )}
+
+      {authError && !authUser && (
+        <AuthErrorModal
+          error={authError}
+          onRetry={() => {
+            void handleSignIn();
+          }}
+          onClose={() => setAuthError(null)}
         />
       )}
 

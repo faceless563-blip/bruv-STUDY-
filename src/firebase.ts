@@ -1,8 +1,12 @@
 import { initializeApp } from 'firebase/app';
 import {
+  browserLocalPersistence,
   getAuth,
+  getRedirectResult,
   GoogleAuthProvider,
+  setPersistence,
   signInWithPopup,
+  signInWithRedirect,
   signOut,
 } from 'firebase/auth';
 import {
@@ -11,13 +15,32 @@ import {
   getFirestore,
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
+import { extractAuthErrorCode } from './utils/authErrorLogic';
 
 const app = initializeApp(firebaseConfig);
+
+export const FIREBASE_PROJECT_ID = firebaseConfig.projectId;
 
 // CRITICAL: Pass firebaseConfig.firestoreDatabaseId so Firestore connects to the provisioned named database
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: 'select_account' });
+
+if (typeof window !== 'undefined') {
+  void setPersistence(auth, browserLocalPersistence).catch(() => {
+    // Fallback to Firebase Auth default persistence if browser blocks local storage
+  });
+}
+
+export function isEmbeddedIframe(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.self !== window.top;
+  } catch {
+    return true;
+  }
+}
 
 export enum OperationType {
   CREATE = 'create',
@@ -84,7 +107,23 @@ async function testConnection() {
 void testConnection();
 
 export async function signInWithGoogle() {
-  return signInWithPopup(auth, googleProvider);
+  try {
+    return await signInWithPopup(auth, googleProvider);
+  } catch (error) {
+    const code = extractAuthErrorCode(error);
+    if (
+      !isEmbeddedIframe() &&
+      (code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment')
+    ) {
+      await signInWithRedirect(auth, googleProvider);
+      return null;
+    }
+    throw error;
+  }
+}
+
+export async function resolveGoogleRedirectResult() {
+  return getRedirectResult(auth);
 }
 
 export async function signOutUser() {

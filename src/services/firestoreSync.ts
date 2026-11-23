@@ -159,6 +159,7 @@ export async function ensureUserWorkspaceInitialized(
 
     await saveWorkspaceDoc(uid, seededState);
 
+    const validSubjectIds = new Set(seededState.subjects.map((s) => sanitizeId(s.id)));
     for (const subj of seededState.subjects) {
       await upsertSubjectDoc(uid, subj);
     }
@@ -166,7 +167,9 @@ export async function ensureUserWorkspaceInitialized(
       await upsertDDayDoc(uid, dday);
     }
     for (const sess of seededState.sessions) {
-      await createSessionDoc(uid, sess);
+      if (validSubjectIds.has(sanitizeId(sess.subjectId))) {
+        await createSessionDoc(uid, sess);
+      }
     }
     for (const todo of seededState.todos) {
       await upsertTodoDoc(uid, todo);
