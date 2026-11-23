@@ -76,6 +76,18 @@ import {
 } from './utils/yptLogic';
 
 const STORAGE_KEY = 'ypt_desktop_state_v4';
+const SIDEBAR_COLLAPSED_KEY = 'ypt_sidebar_collapsed_v1';
+
+function loadInitialSidebarCollapsed(): boolean {
+  if (typeof window !== 'undefined') {
+    try {
+      return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1';
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
 
 function loadInitialState(): AppState {
   if (typeof window !== 'undefined') {
@@ -99,6 +111,7 @@ function loadInitialState(): AppState {
 
 export default function App() {
   const [state, setState] = useState<AppState>(loadInitialState);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(loadInitialSidebarCollapsed);
   const [activeTab, setActiveTab] = useState<TabId>('timer');
   const [activeSubjectId, setActiveSubjectId] = useState<string | null>(null);
   const [sessionStartMs, setSessionStartMs] = useState<number | null>(null);
@@ -375,6 +388,18 @@ export default function App() {
   };
 
   // Handlers
+  const handleToggleSidebar = () => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? '1' : '0');
+      } catch {
+        // ignore storage quota errors
+      }
+      return next;
+    });
+  };
+
   const handleToggleTheme = () => {
     const nextState: AppState = {
       ...state,
@@ -880,6 +905,8 @@ export default function App() {
         isSigningIn={isSigningIn}
         onSignIn={handleSignIn}
         onSignOut={handleSignOut}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={handleToggleSidebar}
       />
 
       <div className="flex-1 min-w-0 min-h-0 flex flex-col">

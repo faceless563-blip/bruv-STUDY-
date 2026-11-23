@@ -5,9 +5,13 @@ import { getDesktopInstallGuidance } from '../utils/pwaLogic';
 
 interface PWAInstallButtonProps {
   variant?: 'header' | 'sidebar' | 'card';
+  collapsed?: boolean;
 }
 
-export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({ variant = 'header' }) => {
+export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
+  variant = 'header',
+  collapsed = false,
+}) => {
   const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
   const [showGuideModal, setShowGuideModal] = useState(false);
 
@@ -80,21 +84,22 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({ variant = 'h
   }
 
   if (variant === 'sidebar') {
+    const label = isIOS ? 'Install on iOS' : 'Install Desktop App';
     return (
       <>
         <button
           type="button"
           onClick={handlePrimaryAction}
-          className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800 text-xs font-medium text-neutral-700 dark:text-neutral-200 transition-colors cursor-pointer"
+          aria-label={label}
+          title={label}
+          className={
+            collapsed
+              ? 'w-9 h-9 flex items-center justify-center rounded-lg border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800 text-neutral-700 dark:text-neutral-200 transition-colors cursor-pointer'
+              : 'w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800 text-xs font-medium text-neutral-700 dark:text-neutral-200 transition-colors cursor-pointer'
+          }
         >
-          <Laptop className="w-3.5 h-3.5 text-orange-500" />
-          <span>
-            {isInstallable
-              ? 'Install Desktop App'
-              : isIOS
-                ? 'Install on iOS'
-                : 'Install Desktop App'}
-          </span>
+          <Laptop className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+          {!collapsed && <span>{label}</span>}
         </button>
 
         {showGuideModal && (
