@@ -1,4 +1,25 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { onAuthStateChanged, User } from 'firebase/auth';
+import { auth, signInWithGoogle, signOutUser } from './firebase';
+import {
+  cheerGroupMissionDoc,
+  createSessionDoc,
+  createStudyGroupDoc,
+  deleteDDayDoc,
+  deleteSubjectDoc,
+  deleteTodoDoc,
+  ensureUserWorkspaceInitialized,
+  joinStudyGroupDoc,
+  leaveStudyGroupDoc,
+  postGroupMissionDoc,
+  saveWorkspaceDoc,
+  subscribeUserWorkspace,
+  syncLeaderboardDoc,
+  upsertDDayDoc,
+  upsertSubjectDoc,
+  upsertTodoDoc,
+  wakeGroupMemberDoc,
+} from './services/firestoreSync';
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
 import { TimerHomeView } from './components/TimerHomeView';
@@ -11,18 +32,22 @@ import { SettingsView } from './components/SettingsView';
 import { VaultView } from './components/VaultView';
 import { UnlockModal } from './components/UnlockModal';
 import { QuickStartModal } from './components/QuickStartModal';
+import { OfflineIndicator } from './components/OfflineIndicator';
 import { createDefaultWallet, createEmptyState } from './data/seedData';
 import {
   AccentTheme,
   AppState,
   ChallengeStatus,
+  DDayTarget,
   FeaturePackId,
   FocusGuardSettings,
   PomodoroConfig,
   StudyCategory,
   StudySession,
+  Subject,
   TabId,
   TimerMode,
+  TodoItem,
   UserProfile,
 } from './types/ypt';
 import {
@@ -70,6 +95,26 @@ export default function App() {
   const [sessionStartMs, setSessionStartMs] = useState<number | null>(null);
   const [unlockPackId, setUnlockPackId] = useState<FeaturePackId | null>(null);
   const [quickStartOpen, setQuickStartOpen] = useState(false);
+  const [authUser, setAuthUser] = useState<{
+    uid: string;
+    email: string | null;
+    displayName: string | null;
+  } | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [syncError, setSyncError] = useState<Error | null>(null);
+
+  if (syncError) {
+    throw syncError;
+  }
+
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  const runCloudTask = (task: () => Promise<unknown>) => {
+    task().catch((err) => {
+      setSyncError(err instanceof Error ? err : new Error(String(err)));
+    });
+  };
 
   // Persist state to localStorage
   useEffect(() => {
@@ -79,6 +124,79 @@ export default function App() {
       // ignore storage quota errors
     }
   }, [state]);
+
+  // Listen to Firebase Auth state & attach Firestore onSnapshot listeners only when authenticated
+  useEffect(() => {
+    let unsubFirestore: (() => void) | null = null;
+    let cancelled = false;
+
+    const unsubAuth = onAuthStateChanged(auth, async (user: User | null) => {
+      if (unsubFirestore) {
+        unsubFirestore();
+        unsubFirestore = null;
+      }
+
+      if (!user) {
+        if (!cancelled) {
+          setAuthUser(null);
+          setAuthReady(true);
+        }
+        return;
+      }
+
+      if (!cancelled) {
+        setAuthUser({
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName,
+        });
+        setAuthReady(true);
+      }
+
+      try {
+        await ensureUserWorkspaceInitialized(user.uid, stateRef.current, user.displayName);
+        if (cancelled) return;
+        unsubFirestore = subscribeUserWorkspace(user.uid, {
+          onWorkspace: (partial) => {
+            setState((prev) => ({
+              ...prev,
+              ...partial,
+            }));
+          },
+          onSubjects: (subjects) => {
+            setState((prev) => ({ ...prev, subjects }));
+          },
+          onSessions: (sessions) => {
+            setState((prev) => ({ ...prev, sessions }));
+          },
+          onTodos: (todos) => {
+            setState((prev) => ({ ...prev, todos }));
+          },
+          onDDays: (ddays) => {
+            setState((prev) => ({ ...prev, ddays }));
+          },
+          onLeaderboard: (rankings) => {
+            setState((prev) => ({ ...prev, rankings }));
+          },
+          onStudyGroups: (groups) => {
+            setState((prev) => ({ ...prev, groups }));
+          },
+        });
+      } catch (err) {
+        if (!cancelled) {
+          setSyncError(err instanceof Error ? err : new Error(String(err)));
+        }
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      unsubAuth();
+      if (unsubFirestore) {
+        unsubFirestore();
+      }
+    };
+  }, []);
 
   // Sync dark mode class and accent theme on <html>
   useEffect(() => {
@@ -174,12 +292,54 @@ export default function App() {
   const soundsThemesUnlocked = isPackUnlocked(state.wallet, 'sounds_themes');
   const customPomodoroUnlocked = isPackUnlocked(state.wallet, 'custom_pomodoro');
 
+  // Sync public non-PII leaderboard standing whenever signed in and stats/focus change
+  useEffect(() => {
+    if (!authReady || !authUser) return;
+    runCloudTask(() =>
+      syncLeaderboardDoc(authUser.uid, {
+        name: state.profile.name,
+        category: state.profile.category,
+        status: activeSubject ? 'studying' : 'resting',
+        currentSubject: activeSubject?.name,
+        dailySeconds: todayTotalSeconds,
+        weeklySeconds: weekTotalSeconds,
+        monthlySeconds: monthTotalSeconds,
+        streakDays,
+      })
+    );
+  }, [
+    authReady,
+    authUser,
+    state.profile.name,
+    state.profile.category,
+    activeSubject,
+    todayTotalSeconds,
+    weekTotalSeconds,
+    monthTotalSeconds,
+    streakDays,
+  ]);
+
+  const handleSignIn = () => {
+    void signInWithGoogle().catch((err) => {
+      console.error('Google sign-in error:', err);
+    });
+  };
+
+  const handleSignOut = () => {
+    void signOutUser().then(() => {
+      setActiveSubjectId(null);
+      setSessionStartMs(null);
+    });
+  };
+
   // Handlers
   const handleToggleTheme = () => {
-    setState((prev) => ({
-      ...prev,
-      theme: prev.theme === 'light' ? 'dark' : 'light',
-    }));
+    const nextState: AppState = {
+      ...state,
+      theme: state.theme === 'light' ? 'dark' : 'light',
+    };
+    setState(nextState);
+    if (authUser) runCloudTask(() => saveWorkspaceDoc(authUser.uid, nextState));
   };
 
   const handleStartSubject = (subjectId: string) => {
@@ -201,21 +361,19 @@ export default function App() {
     color: string,
     dailyTargetMinutes: number
   ) => {
-    const id = `subj-${Date.now()}`;
+    const newSubj: Subject = {
+      id: `subj-${Date.now()}`,
+      name,
+      color,
+      dailyTargetMinutes,
+    };
     setState((prev) => ({
       ...prev,
-      subjects: [
-        ...prev.subjects,
-        {
-          id,
-          name,
-          color,
-          dailyTargetMinutes,
-        },
-      ],
+      subjects: [...prev.subjects, newSubj],
     }));
+    if (authUser) runCloudTask(() => upsertSubjectDoc(authUser.uid, newSubj));
     setQuickStartOpen(false);
-    setActiveSubjectId(id);
+    setActiveSubjectId(newSubj.id);
     setSessionStartMs(Date.now());
   };
 
@@ -239,6 +397,7 @@ export default function App() {
       ...prev,
       sessions: [...prev.sessions, newSession],
     }));
+    if (authUser) runCloudTask(() => createSessionDoc(authUser.uid, newSession));
     setActiveSubjectId(null);
     setSessionStartMs(null);
   };
@@ -253,18 +412,17 @@ export default function App() {
     color: string,
     dailyTargetMinutes: number
   ) => {
+    const newSubj: Subject = {
+      id: `subj-${Date.now()}`,
+      name,
+      color,
+      dailyTargetMinutes,
+    };
     setState((prev) => ({
       ...prev,
-      subjects: [
-        ...prev.subjects,
-        {
-          id: `subj-${Date.now()}`,
-          name,
-          color,
-          dailyTargetMinutes,
-        },
-      ],
+      subjects: [...prev.subjects, newSubj],
     }));
+    if (authUser) runCloudTask(() => upsertSubjectDoc(authUser.uid, newSubj));
   };
 
   const handleUpdateSubject = (
@@ -273,12 +431,12 @@ export default function App() {
     color: string,
     dailyTargetMinutes: number
   ) => {
+    const updated: Subject = { id, name, color, dailyTargetMinutes };
     setState((prev) => ({
       ...prev,
-      subjects: prev.subjects.map((s) =>
-        s.id === id ? { ...s, name, color, dailyTargetMinutes } : s
-      ),
+      subjects: prev.subjects.map((s) => (s.id === id ? updated : s)),
     }));
+    if (authUser) runCloudTask(() => upsertSubjectDoc(authUser.uid, updated));
   };
 
   const handleDeleteSubject = (id: string) => {
@@ -286,21 +444,21 @@ export default function App() {
       ...prev,
       subjects: prev.subjects.filter((s) => s.id !== id),
     }));
+    if (authUser) runCloudTask(() => deleteSubjectDoc(authUser.uid, id));
   };
 
   const handleAddDDay = (title: string, targetDate: string) => {
+    const newDDay: DDayTarget = {
+      id: `dd-${Date.now()}`,
+      title,
+      targetDate,
+      isPinned: state.ddays.length === 0,
+    };
     setState((prev) => ({
       ...prev,
-      ddays: [
-        ...prev.ddays,
-        {
-          id: `dd-${Date.now()}`,
-          title,
-          targetDate,
-          isPinned: prev.ddays.length === 0,
-        },
-      ],
+      ddays: [...prev.ddays, newDDay],
     }));
+    if (authUser) runCloudTask(() => upsertDDayDoc(authUser.uid, newDDay));
   };
 
   const handleDeleteDDay = (id: string) => {
@@ -308,13 +466,20 @@ export default function App() {
       ...prev,
       ddays: prev.ddays.filter((d) => d.id !== id),
     }));
+    if (authUser) runCloudTask(() => deleteDDayDoc(authUser.uid, id));
   };
 
   const handlePinDDay = (id: string) => {
+    const updated = state.ddays.map((d) => ({ ...d, isPinned: d.id === id }));
     setState((prev) => ({
       ...prev,
-      ddays: prev.ddays.map((d) => ({ ...d, isPinned: d.id === id })),
+      ddays: updated,
     }));
+    if (authUser) {
+      for (const d of updated) {
+        runCloudTask(() => upsertDDayDoc(authUser.uid, d));
+      }
+    }
   };
 
   const handleAddTodo = (
@@ -323,29 +488,30 @@ export default function App() {
     studyDayKey: string,
     estimatedMinutes: number
   ) => {
+    const newTodo: TodoItem = {
+      id: `todo-${Date.now()}`,
+      subjectId,
+      title,
+      completed: false,
+      studyDayKey,
+      estimatedMinutes,
+    };
     setState((prev) => ({
       ...prev,
-      todos: [
-        {
-          id: `todo-${Date.now()}`,
-          subjectId,
-          title,
-          completed: false,
-          studyDayKey,
-          estimatedMinutes,
-        },
-        ...prev.todos,
-      ],
+      todos: [newTodo, ...prev.todos],
     }));
+    if (authUser) runCloudTask(() => upsertTodoDoc(authUser.uid, newTodo));
   };
 
   const handleToggleTodo = (todoId: string) => {
+    const target = state.todos.find((t) => t.id === todoId);
+    if (!target) return;
+    const toggled: TodoItem = { ...target, completed: !target.completed };
     setState((prev) => ({
       ...prev,
-      todos: prev.todos.map((t) =>
-        t.id === todoId ? { ...t, completed: !t.completed } : t
-      ),
+      todos: prev.todos.map((t) => (t.id === todoId ? toggled : t)),
     }));
+    if (authUser) runCloudTask(() => upsertTodoDoc(authUser.uid, toggled));
   };
 
   const handleDeleteTodo = (todoId: string) => {
@@ -353,6 +519,7 @@ export default function App() {
       ...prev,
       todos: prev.todos.filter((t) => t.id !== todoId),
     }));
+    if (authUser) runCloudTask(() => deleteTodoDoc(authUser.uid, todoId));
   };
 
   const handleRolloverTodos = (targetDayKey: string): number => {
@@ -362,6 +529,13 @@ export default function App() {
         ...prev,
         todos: result.updatedTodos,
       }));
+      if (authUser) {
+        for (const t of result.updatedTodos) {
+          if (t.studyDayKey === targetDayKey && !t.completed) {
+            runCloudTask(() => upsertTodoDoc(authUser.uid, t));
+          }
+        }
+      }
     }
     return result.movedCount;
   };
@@ -386,24 +560,35 @@ export default function App() {
       ...prev,
       sessions: [...prev.sessions, newSession],
     }));
+    if (authUser) runCloudTask(() => createSessionDoc(authUser.uid, newSession));
   };
 
   const handleJoinGroup = (groupId: string) => {
+    const grp = state.groups.find((g) => g.id === groupId);
     setState((prev) => ({
       ...prev,
-      groups: prev.groups.map((g) =>
-        g.id === groupId ? { ...g, joined: true } : g
-      ),
+      groups: prev.groups.map((g) => (g.id === groupId ? { ...g, joined: true } : g)),
     }));
+    if (authUser && grp) {
+      runCloudTask(() =>
+        joinStudyGroupDoc(
+          authUser.uid,
+          groupId,
+          grp.isPrivate,
+          state.profile.name,
+          state.profile.dailyGoalHours,
+          todayTotalSeconds
+        )
+      );
+    }
   };
 
   const handleLeaveGroup = (groupId: string) => {
     setState((prev) => ({
       ...prev,
-      groups: prev.groups.map((g) =>
-        g.id === groupId ? { ...g, joined: false } : g
-      ),
+      groups: prev.groups.map((g) => (g.id === groupId ? { ...g, joined: false } : g)),
     }));
+    if (authUser) runCloudTask(() => leaveStudyGroupDoc(authUser.uid, groupId));
   };
 
   const handleWakeMember = (groupId: string, memberId: string) => {
@@ -414,14 +599,13 @@ export default function App() {
           ? {
               ...g,
               members: g.members.map((m) =>
-                m.id === memberId
-                  ? { ...m, wakesReceived: m.wakesReceived + 1 }
-                  : m
+                m.id === memberId ? { ...m, wakesReceived: m.wakesReceived + 1 } : m
               ),
             }
           : g
       ),
     }));
+    if (authUser) runCloudTask(() => wakeGroupMemberDoc(groupId, memberId));
   };
 
   const handleCheerMission = (groupId: string, missionId: string) => {
@@ -438,22 +622,25 @@ export default function App() {
           : g
       ),
     }));
+    if (authUser) runCloudTask(() => cheerGroupMissionDoc(groupId, missionId));
   };
 
   const handleSubmitCheckIn = (groupId: string, note: string) => {
-    setState((prev) => ({
-      ...prev,
+    const grp = state.groups.find((g) => g.id === groupId);
+    const hoursLabel = formatDurationShort(todayTotalSeconds);
+    const nextState: AppState = {
+      ...state,
       checkedInToday: true,
-      groups: prev.groups.map((g) =>
+      groups: state.groups.map((g) =>
         g.id === groupId
           ? {
               ...g,
               missions: [
                 {
                   id: `mis-${Date.now()}`,
-                  authorName: prev.profile.name,
+                  authorName: state.profile.name,
                   title: note,
-                  studyHoursLogged: formatDurationShort(todayTotalSeconds),
+                  studyHoursLogged: hoursLabel,
                   timestampLabel: 'Just now',
                   verified: true,
                   cheers: 1,
@@ -463,7 +650,21 @@ export default function App() {
             }
           : g
       ),
-    }));
+    };
+    setState(nextState);
+    if (authUser && grp) {
+      runCloudTask(() => saveWorkspaceDoc(authUser.uid, nextState));
+      runCloudTask(() =>
+        postGroupMissionDoc(
+          authUser.uid,
+          groupId,
+          grp.isPrivate,
+          state.profile.name,
+          note,
+          hoursLabel
+        )
+      );
+    }
   };
 
   const handleCreateGroup = (payload: {
@@ -490,10 +691,23 @@ export default function App() {
       ...prev,
       groups: [newGroup, ...prev.groups],
     }));
+    if (authUser) {
+      runCloudTask(() =>
+        createStudyGroupDoc(
+          authUser.uid,
+          state.profile.name,
+          state.profile.dailyGoalHours,
+          todayTotalSeconds,
+          newGroup
+        )
+      );
+    }
   };
 
   const handleChangeTimerMode = (mode: TimerMode) => {
-    setState((prev) => ({ ...prev, activeTimerMode: mode }));
+    const nextState: AppState = { ...state, activeTimerMode: mode };
+    setState(nextState);
+    if (authUser) runCloudTask(() => saveWorkspaceDoc(authUser.uid, nextState));
   };
 
   const handleOpenUnlockModal = (packId: FeaturePackId) => {
@@ -505,43 +719,53 @@ export default function App() {
       handleOpenUnlockModal('focus_lock');
       return;
     }
-    setState((prev) => ({
-      ...prev,
+    const nextState: AppState = {
+      ...state,
       focusGuard: {
-        ...prev.focusGuard,
-        autoPauseOnTabSwitch: !prev.focusGuard.autoPauseOnTabSwitch,
+        ...state.focusGuard,
+        autoPauseOnTabSwitch: !state.focusGuard.autoPauseOnTabSwitch,
       },
-    }));
+    };
+    setState(nextState);
+    if (authUser) runCloudTask(() => saveWorkspaceDoc(authUser.uid, nextState));
   };
 
   const handleUpdateProfile = (profile: UserProfile) => {
-    setState((prev) => ({ ...prev, profile }));
+    const nextState: AppState = { ...state, profile };
+    setState(nextState);
+    if (authUser) runCloudTask(() => saveWorkspaceDoc(authUser.uid, nextState));
   };
 
   const handleUpdatePomodoro = (pomodoro: PomodoroConfig) => {
-    setState((prev) => ({ ...prev, pomodoro }));
+    const nextState: AppState = { ...state, pomodoro };
+    setState(nextState);
+    if (authUser) runCloudTask(() => saveWorkspaceDoc(authUser.uid, nextState));
   };
 
   const handleUpdateFocusGuard = (focusGuard: FocusGuardSettings) => {
-    setState((prev) => ({ ...prev, focusGuard }));
+    const nextState: AppState = { ...state, focusGuard };
+    setState(nextState);
+    if (authUser) runCloudTask(() => saveWorkspaceDoc(authUser.uid, nextState));
   };
 
   const handleClaimChallenge = (challenge: ChallengeStatus) => {
-    setState((prev) => ({
-      ...prev,
-      wallet: claimChallengeReward(prev.wallet, challenge),
-    }));
+    const nextState: AppState = {
+      ...state,
+      wallet: claimChallengeReward(state.wallet, challenge),
+    };
+    setState(nextState);
+    if (authUser) runCloudTask(() => saveWorkspaceDoc(authUser.uid, nextState));
   };
 
   const handleUnlockPack = (packId: FeaturePackId) => {
-    setState((prev) => {
-      const res = unlockPackWithCoins(prev.wallet, packId);
-      if (!res.ok) return prev;
-      return {
-        ...prev,
-        wallet: res.wallet,
-      };
-    });
+    const res = unlockPackWithCoins(state.wallet, packId);
+    if (!res.ok) return;
+    const nextState: AppState = {
+      ...state,
+      wallet: res.wallet,
+    };
+    setState(nextState);
+    if (authUser) runCloudTask(() => saveWorkspaceDoc(authUser.uid, nextState));
   };
 
   const handleSelectAccentTheme = (accentTheme: AccentTheme) => {
@@ -549,13 +773,15 @@ export default function App() {
       handleOpenUnlockModal('sounds_themes');
       return;
     }
-    setState((prev) => ({
-      ...prev,
+    const nextState: AppState = {
+      ...state,
       wallet: {
-        ...prev.wallet,
+        ...state.wallet,
         accentTheme,
       },
-    }));
+    };
+    setState(nextState);
+    if (authUser) runCloudTask(() => saveWorkspaceDoc(authUser.uid, nextState));
   };
 
   const handleExportCsv = () => {
@@ -578,7 +804,20 @@ export default function App() {
   const handleResetAllData = () => {
     setActiveSubjectId(null);
     setSessionStartMs(null);
-    setState(createEmptyState());
+    const fresh = createEmptyState();
+    if (authUser) {
+      for (const s of state.subjects) {
+        runCloudTask(() => deleteSubjectDoc(authUser.uid, s.id));
+      }
+      for (const t of state.todos) {
+        runCloudTask(() => deleteTodoDoc(authUser.uid, t.id));
+      }
+      for (const d of state.ddays) {
+        runCloudTask(() => deleteDDayDoc(authUser.uid, d.id));
+      }
+      runCloudTask(() => saveWorkspaceDoc(authUser.uid, fresh));
+    }
+    setState(fresh);
   };
 
   return (
@@ -594,6 +833,10 @@ export default function App() {
         coins={state.wallet.coins}
         claimableCount={claimableCount}
         isFocusing={Boolean(activeSubject)}
+        authUser={authUser}
+        authReady={authReady}
+        onSignIn={handleSignIn}
+        onSignOut={handleSignOut}
       />
 
       <div className="flex-1 min-w-0 min-h-0 flex flex-col">
@@ -723,6 +966,9 @@ export default function App() {
               onRequestUnlock={handleOpenUnlockModal}
               onToggleTheme={handleToggleTheme}
               onResetAllData={handleResetAllData}
+              authUser={authUser}
+              onSignIn={handleSignIn}
+              onSignOut={handleSignOut}
             />
           )}
         </main>
@@ -769,6 +1015,8 @@ export default function App() {
           onOpenChallenges={() => setActiveTab('vault')}
         />
       )}
+
+      <OfflineIndicator />
     </div>
   );
 }

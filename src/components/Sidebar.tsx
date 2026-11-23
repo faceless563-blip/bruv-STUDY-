@@ -4,6 +4,8 @@ import {
   CalendarClock,
   Coins,
   Flame,
+  LogIn,
+  LogOut,
   Moon,
   Settings,
   Sun,
@@ -13,6 +15,7 @@ import {
 } from 'lucide-react';
 import { TabId, UserProfile } from '../types/ypt';
 import { formatDurationShort } from '../utils/yptLogic';
+import { PWAInstallButton } from './PWAInstallButton';
 
 interface SidebarProps {
   activeTab: TabId;
@@ -25,6 +28,10 @@ interface SidebarProps {
   coins: number;
   claimableCount: number;
   isFocusing: boolean;
+  authUser: { uid: string; email: string | null; displayName: string | null } | null;
+  authReady: boolean;
+  onSignIn: () => void;
+  onSignOut: () => void;
 }
 
 const NAV_ITEMS: Array<{ id: TabId; label: string; icon: React.ComponentType<{ className?: string }> }> = [
@@ -48,6 +55,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   coins,
   claimableCount,
   isFocusing,
+  authUser,
+  authReady,
+  onSignIn,
+  onSignOut,
 }) => {
   const goalSeconds = profile.dailyGoalHours * 3600;
   const goalPct = Math.min(100, Math.round((todaySeconds / Math.max(1, goalSeconds)) * 100));
@@ -140,23 +151,52 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </div>
 
-        <div className="pt-3 border-t border-neutral-200 dark:border-neutral-800 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-neutral-900 dark:bg-neutral-700 text-white font-display font-semibold text-xs flex items-center justify-center shrink-0">
-            {profile.name
-              .split(' ')
-              .map((w) => w[0])
-              .join('')
-              .slice(0, 2)
-              .toUpperCase()}
-          </div>
-          <div className="min-w-0">
-            <div className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 truncate">
-              {profile.name}
+        <div className="pt-3 border-t border-neutral-200 dark:border-neutral-800 space-y-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-9 h-9 rounded-lg bg-neutral-900 dark:bg-neutral-700 text-white font-display font-semibold text-xs flex items-center justify-center shrink-0">
+                {profile.name
+                  .split(' ')
+                  .map((w) => w[0])
+                  .join('')
+                  .slice(0, 2)
+                  .toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 truncate">
+                  {profile.name}
+                </div>
+                <div className="text-xs text-neutral-500 dark:text-neutral-400 truncate">
+                  {isFocusing ? 'Focusing now' : profile.category}
+                </div>
+              </div>
             </div>
-            <div className="text-xs text-neutral-500 dark:text-neutral-400 truncate">
-              {isFocusing ? 'Focusing now' : profile.category}
-            </div>
+
+            {authReady && authUser && (
+              <button
+                type="button"
+                onClick={onSignOut}
+                aria-label="Sign out of Google account"
+                title={authUser.email ?? 'Sign out'}
+                className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-900 hover:bg-neutral-100 dark:hover:text-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer shrink-0"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
+
+          {authReady && !authUser && (
+            <button
+              type="button"
+              onClick={onSignIn}
+              className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800 text-xs font-medium text-neutral-700 dark:text-neutral-200 transition-colors cursor-pointer"
+            >
+              <LogIn className="w-3.5 h-3.5 text-orange-500" />
+              <span>Sign in with Google</span>
+            </button>
+          )}
+
+          <PWAInstallButton variant="sidebar" />
         </div>
       </div>
     </aside>

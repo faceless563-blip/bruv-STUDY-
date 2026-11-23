@@ -1,0 +1,568 @@
+{
+  "entities": {
+    "UserWorkspace": {
+      "title": "UserWorkspace",
+      "description": "Private study desk preferences, timer settings, focus guard configuration, and Bruv Coin wallet owned by a single user.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "theme": {
+          "type": "string",
+          "enum": ["light", "dark"]
+        },
+        "activeTimerMode": {
+          "type": "string",
+          "enum": ["stopwatch", "pomodoro"]
+        },
+        "profileName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "profileCategory": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 50
+        },
+        "dailyGoalHours": {
+          "type": "number"
+        },
+        "resetHour": {
+          "type": "number"
+        },
+        "motto": {
+          "type": "string",
+          "maxLength": 140
+        },
+        "pomodoroFocusMinutes": {
+          "type": "number"
+        },
+        "pomodoroShortBreakMinutes": {
+          "type": "number"
+        },
+        "pomodoroLongBreakMinutes": {
+          "type": "number"
+        },
+        "pomodoroCyclesBeforeLongBreak": {
+          "type": "number"
+        },
+        "autoPauseOnTabSwitch": {
+          "type": "boolean"
+        },
+        "allowedTools": {
+          "type": "array"
+        },
+        "showFloatingGoalBar": {
+          "type": "boolean"
+        },
+        "coins": {
+          "type": "number"
+        },
+        "unlockedPacks": {
+          "type": "array"
+        },
+        "proAllAccess": {
+          "type": "boolean"
+        },
+        "claimedPeriodKeys": {
+          "type": "array"
+        },
+        "accentTheme": {
+          "type": "string",
+          "enum": ["orange", "cobalt", "emerald", "violet"]
+        },
+        "checkedInToday": {
+          "type": "boolean"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "uid",
+        "theme",
+        "activeTimerMode",
+        "profileName",
+        "profileCategory",
+        "dailyGoalHours",
+        "resetHour",
+        "motto",
+        "pomodoroFocusMinutes",
+        "pomodoroShortBreakMinutes",
+        "pomodoroLongBreakMinutes",
+        "pomodoroCyclesBeforeLongBreak",
+        "autoPauseOnTabSwitch",
+        "allowedTools",
+        "showFloatingGoalBar",
+        "coins",
+        "unlockedPacks",
+        "proAllAccess",
+        "claimedPeriodKeys",
+        "accentTheme",
+        "checkedInToday",
+        "updatedAt"
+      ]
+    },
+    "Subject": {
+      "title": "Subject",
+      "description": "A user-defined study subject with color badge and daily target minutes.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "color": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 16,
+          "pattern": "^#[0-9A-Fa-f]{6}$"
+        },
+        "dailyTargetMinutes": {
+          "type": "number"
+        },
+        "archived": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "userId", "name", "color", "dailyTargetMinutes", "archived", "createdAt"]
+    },
+    "StudySession": {
+      "title": "StudySession",
+      "description": "A recorded study focus block tied to a subject.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "subjectId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "startTime": {
+          "type": "number"
+        },
+        "endTime": {
+          "type": "number"
+        },
+        "durationSeconds": {
+          "type": "number"
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["stopwatch", "pomodoro"]
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "userId", "subjectId", "startTime", "endTime", "durationSeconds", "mode", "note", "createdAt"]
+    },
+    "TodoItem": {
+      "title": "TodoItem",
+      "description": "A daily study task linked to a subject and study day key.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "subjectId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 140
+        },
+        "completed": {
+          "type": "boolean"
+        },
+        "studyDayKey": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 10,
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "estimatedMinutes": {
+          "type": "number"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "userId", "subjectId", "title", "completed", "studyDayKey", "estimatedMinutes", "createdAt"]
+    },
+    "DDayTarget": {
+      "title": "DDayTarget",
+      "description": "An exam or milestone countdown date.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "targetDate": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 10,
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "isPinned": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "userId", "title", "targetDate", "isPinned", "createdAt"]
+    },
+    "LeaderboardEntry": {
+      "title": "LeaderboardEntry",
+      "description": "Public non-PII study ranking entry displayed in Global Category Rankings.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "isPublic": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "category": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 50
+        },
+        "status": {
+          "type": "string",
+          "enum": ["studying", "resting", "offline"]
+        },
+        "currentSubject": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "dailySeconds": {
+          "type": "number"
+        },
+        "weeklySeconds": {
+          "type": "number"
+        },
+        "monthlySeconds": {
+          "type": "number"
+        },
+        "streakDays": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "userId",
+        "isPublic",
+        "name",
+        "category",
+        "status",
+        "currentSubject",
+        "dailySeconds",
+        "weeklySeconds",
+        "monthlySeconds",
+        "streakDays",
+        "updatedAt"
+      ]
+    },
+    "StudyGroup": {
+      "title": "StudyGroup",
+      "description": "A virtual study room shared among students.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "category": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 50
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "maxMembers": {
+          "type": "number"
+        },
+        "dailyMinHours": {
+          "type": "number"
+        },
+        "isPrivate": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "ownerId", "name", "category", "description", "maxMembers", "dailyMinHours", "isPrivate", "createdAt"]
+    },
+    "GroupMember": {
+      "title": "GroupMember",
+      "description": "A participant desk inside a virtual study room.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "groupId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "isPrivateGroup": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "avatarInitials": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4
+        },
+        "status": {
+          "type": "string",
+          "enum": ["studying", "resting", "offline"]
+        },
+        "currentSubject": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "baseTodaySeconds": {
+          "type": "number"
+        },
+        "dailyGoalHours": {
+          "type": "number"
+        },
+        "wakesReceived": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "groupId",
+        "userId",
+        "isPrivateGroup",
+        "name",
+        "avatarInitials",
+        "status",
+        "currentSubject",
+        "baseTodaySeconds",
+        "dailyGoalHours",
+        "wakesReceived",
+        "updatedAt"
+      ]
+    },
+    "GroupMission": {
+      "title": "GroupMission",
+      "description": "A daily check-in post inside a virtual study room.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "groupId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "authorId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "isPrivateGroup": {
+          "type": "boolean"
+        },
+        "authorName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "studyHoursLogged": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 24
+        },
+        "cheers": {
+          "type": "number"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "groupId",
+        "authorId",
+        "isPrivateGroup",
+        "authorName",
+        "title",
+        "studyHoursLogged",
+        "cheers",
+        "createdAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserWorkspace" },
+      "description": "Owner-only user desk preferences, timer settings, focus guard configuration, and Bruv Coin wallet."
+    },
+    "/users/{userId}/subjects/{subjectId}": {
+      "schema": { "$ref": "#/entities/Subject" },
+      "description": "Study subjects created by the user."
+    },
+    "/users/{userId}/sessions/{sessionId}": {
+      "schema": { "$ref": "#/entities/StudySession" },
+      "description": "Completed study sessions logged by the user."
+    },
+    "/users/{userId}/todos/{todoId}": {
+      "schema": { "$ref": "#/entities/TodoItem" },
+      "description": "User daily planner to-do items."
+    },
+    "/users/{userId}/ddays/{ddayId}": {
+      "schema": { "$ref": "#/entities/DDayTarget" },
+      "description": "User exam and milestone countdowns."
+    },
+    "/leaderboard/{userId}": {
+      "schema": { "$ref": "#/entities/LeaderboardEntry" },
+      "description": "Public non-PII study ranking entries."
+    },
+    "/studyGroups/{groupId}": {
+      "schema": { "$ref": "#/entities/StudyGroup" },
+      "description": "Virtual study rooms created by users."
+    },
+    "/studyGroups/{groupId}/members/{memberId}": {
+      "schema": { "$ref": "#/entities/GroupMember" },
+      "description": "Member desks participating in a study group."
+    },
+    "/studyGroups/{groupId}/missions/{missionId}": {
+      "schema": { "$ref": "#/entities/GroupMission" },
+      "description": "Daily check-in missions posted in a study group."
+    }
+  }
+}

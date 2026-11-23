@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="bruvBg" x1="48" y1="32" x2="464" y2="480" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FB923C" />
+      <stop offset="52%" stop-color="#F97316" />
+      <stop offset="100%" stop-color="#EA580C" />
+    </linearGradient>
+    <linearGradient id="flameFill" x1="256" y1="112" x2="256" y2="392" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="100%" stop-color="#FFF7ED" />
+    </linearGradient>
+  </defs>
+  <rect x="24" y="24" width="464" height="464" rx="108" fill="url(#bruvBg)" />
+  <circle cx="256" cy="256" r="174" stroke="#FFFFFF" stroke-opacity="0.22" stroke-width="14" stroke-dasharray="16 18" stroke-linecap="round" />
+  <path
+    d="M273 116C273 116 306 164 294 205C314 191 325 168 325 168C354 199 366 239 366 276C366 340 317 390 256 390C195 390 146 340 146 276C146 226 177 183 216 154C239 137 262 124 273 116Z"
+    fill="url(#flameFill)"
+  />
+  <path
+    d="M256 244C276 266 290 287 290 310C290 331 275 348 256 348C237 348 222 331 222 310C222 287 236 266 256 244Z"
+    fill="#F97316"
+  />
+</svg>

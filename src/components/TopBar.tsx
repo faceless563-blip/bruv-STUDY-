@@ -2,6 +2,7 @@ import React from 'react';
 import { Coins, Play, ShieldCheck } from 'lucide-react';
 import { DDayTarget, TabId } from '../types/ypt';
 import { calculateDDay } from '../utils/yptLogic';
+import { PWAInstallButton } from './PWAInstallButton';
 
 interface TopBarProps {
   activeTab: TabId;
@@ -84,8 +85,9 @@ export const TopBar: React.FC<TopBarProps> = ({
         </button>
       </div>
 
-      {/* Zone 3: Single Primary Action */}
-      <div className="shrink-0">
+      {/* Zone 3: Primary Action + Install App (when available) */}
+      <div className="flex items-center gap-2.5 shrink-0">
+        <PWAInstallButton variant="header" />
         <button
           type="button"
           onClick={onQuickStart}

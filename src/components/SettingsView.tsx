@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Lock, Palette, Plus, RotateCcw, ShieldCheck, X } from 'lucide-react';
+import { Cloud, Lock, LogIn, LogOut, Palette, Plus, RotateCcw, ShieldCheck, X } from 'lucide-react';
 import {
   AccentTheme,
   FeaturePackId,
@@ -10,6 +10,7 @@ import {
   UserProfile,
   WalletState,
 } from '../types/ypt';
+import { PWAInstallButton } from './PWAInstallButton';
 
 const ACCENT_THEMES: Array<{ id: AccentTheme; label: string; swatch: string }> = [
   { id: 'orange', label: 'Flame Orange', swatch: '#F97316' },
@@ -34,6 +35,9 @@ interface SettingsViewProps {
   onRequestUnlock: (packId: FeaturePackId) => void;
   onToggleTheme: () => void;
   onResetAllData: () => void;
+  authUser: { uid: string; email: string | null; displayName: string | null } | null;
+  onSignIn: () => void;
+  onSignOut: () => void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
@@ -52,6 +56,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onRequestUnlock,
   onToggleTheme,
   onResetAllData,
+  authUser,
+  onSignIn,
+  onSignOut,
 }) => {
   const [name, setName] = useState(profile.name);
   const [category, setCategory] = useState<StudyCategory>(profile.category);
@@ -124,6 +131,45 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   return (
     <div className="max-w-[960px] mx-auto space-y-6">
+      {/* Cloud Sync Account Card */}
+      <section className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#14171D] p-6 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <Cloud className="w-5 h-5 text-orange-500 shrink-0 mt-0.5" />
+          <div>
+            <h2 className="font-display font-semibold text-base text-neutral-900 dark:text-neutral-100">
+              Firebase Cloud Sync
+            </h2>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
+              {authUser
+                ? `Signed in as ${authUser.displayName || authUser.email || 'Google Account'}${authUser.email ? ` (${authUser.email})` : ''}. Your subjects, study logs, tasks, and wallet sync automatically.`
+                : 'Sign in with Google to save and sync your subjects, study hours, tasks, and feature unlocks across devices.'}
+            </p>
+          </div>
+        </div>
+        {authUser ? (
+          <button
+            type="button"
+            onClick={onSignOut}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800 text-xs font-medium text-neutral-700 dark:text-neutral-200 cursor-pointer shrink-0"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Sign Out</span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={onSignIn}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-xs font-medium cursor-pointer shrink-0"
+          >
+            <LogIn className="w-3.5 h-3.5" />
+            <span>Sign in with Google</span>
+          </button>
+        )}
+      </section>
+
+      {/* Desktop App Installation */}
+      <PWAInstallButton variant="card" />
+
       {/* Profile & Study Cycle Settings */}
       <form
         onSubmit={handleSaveProfileAndTimer}

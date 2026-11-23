@@ -1,0 +1,565 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Pillar 0: Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Phase 3: Hardened global primitives
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidDateKey(val) {
+      return val is string && val.size() == 10 && val.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+    }
+
+    function isValidHexColor(val) {
+      return val is string && val.size() == 7 && val.matches('^#[0-9A-Fa-f]{6}$');
+    }
+
+    function isBoundedStringList(arr, maxLen) {
+      return arr is list && arr.size() <= maxLen && (arr.size() == 0 || arr[0] is string);
+    }
+
+    function isValidUserWorkspace(data, userId) {
+      return data.keys().hasAll([
+          'uid',
+          'theme',
+          'activeTimerMode',
+          'profileName',
+          'profileCategory',
+          'dailyGoalHours',
+          'resetHour',
+          'motto',
+          'pomodoroFocusMinutes',
+          'pomodoroShortBreakMinutes',
+          'pomodoroLongBreakMinutes',
+          'pomodoroCyclesBeforeLongBreak',
+          'autoPauseOnTabSwitch',
+          'allowedTools',
+          'showFloatingGoalBar',
+          'coins',
+          'unlockedPacks',
+          'proAllAccess',
+          'claimedPeriodKeys',
+          'accentTheme',
+          'checkedInToday',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'uid',
+          'theme',
+          'activeTimerMode',
+          'profileName',
+          'profileCategory',
+          'dailyGoalHours',
+          'resetHour',
+          'motto',
+          'pomodoroFocusMinutes',
+          'pomodoroShortBreakMinutes',
+          'pomodoroLongBreakMinutes',
+          'pomodoroCyclesBeforeLongBreak',
+          'autoPauseOnTabSwitch',
+          'allowedTools',
+          'showFloatingGoalBar',
+          'coins',
+          'unlockedPacks',
+          'proAllAccess',
+          'claimedPeriodKeys',
+          'accentTheme',
+          'checkedInToday',
+          'updatedAt'
+        ])
+        && data.uid is string && data.uid == userId && isValidId(data.uid)
+        && data.theme in ['light', 'dark']
+        && data.activeTimerMode in ['stopwatch', 'pomodoro']
+        && data.profileName is string && data.profileName.size() >= 1 && data.profileName.size() <= 60
+        && data.profileCategory is string && data.profileCategory.size() >= 1 && data.profileCategory.size() <= 50
+        && data.dailyGoalHours is number && data.dailyGoalHours >= 1 && data.dailyGoalHours <= 18
+        && data.resetHour is number && data.resetHour >= 0 && data.resetHour <= 11
+        && data.motto is string && data.motto.size() <= 140
+        && data.pomodoroFocusMinutes is number && data.pomodoroFocusMinutes >= 5 && data.pomodoroFocusMinutes <= 120
+        && data.pomodoroShortBreakMinutes is number && data.pomodoroShortBreakMinutes >= 1 && data.pomodoroShortBreakMinutes <= 30
+        && data.pomodoroLongBreakMinutes is number && data.pomodoroLongBreakMinutes >= 5 && data.pomodoroLongBreakMinutes <= 60
+        && data.pomodoroCyclesBeforeLongBreak is number && data.pomodoroCyclesBeforeLongBreak >= 1 && data.pomodoroCyclesBeforeLongBreak <= 10
+        && data.autoPauseOnTabSwitch is bool
+        && isBoundedStringList(data.allowedTools, 20)
+        && data.showFloatingGoalBar is bool
+        && data.coins is number && data.coins >= 0 && data.coins <= 1000000
+        && data.unlockedPacks is list && data.unlockedPacks.size() <= 5
+        && data.unlockedPacks.hasOnly(['focus_lock', 'study_groups', 'advanced_insights', 'sounds_themes', 'custom_pomodoro'])
+        && data.proAllAccess is bool
+        && isBoundedStringList(data.claimedPeriodKeys, 500)
+        && data.accentTheme in ['orange', 'cobalt', 'emerald', 'violet']
+        && data.checkedInToday is bool
+        && data.updatedAt is timestamp && data.updatedAt == request.time;
+    }
+
+    function isValidSubject(data, userId, subjectId) {
+      return data.keys().hasAll(['id', 'userId', 'name', 'color', 'dailyTargetMinutes', 'archived', 'createdAt'])
+        && data.keys().hasOnly(['id', 'userId', 'name', 'color', 'dailyTargetMinutes', 'archived', 'createdAt'])
+        && data.id is string && data.id == subjectId && isValidId(data.id)
+        && data.userId is string && data.userId == userId && isValidId(data.userId)
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 60
+        && isValidHexColor(data.color)
+        && data.dailyTargetMinutes is number && data.dailyTargetMinutes >= 10 && data.dailyTargetMinutes <= 720
+        && data.archived is bool
+        && data.createdAt is timestamp;
+    }
+
+    function isValidStudySession(data, userId, sessionId) {
+      return data.keys().hasAll(['id', 'userId', 'subjectId', 'startTime', 'endTime', 'durationSeconds', 'mode', 'note', 'createdAt'])
+        && data.keys().hasOnly(['id', 'userId', 'subjectId', 'startTime', 'endTime', 'durationSeconds', 'mode', 'note', 'createdAt'])
+        && data.id is string && data.id == sessionId && isValidId(data.id)
+        && data.userId is string && data.userId == userId && isValidId(data.userId)
+        && data.subjectId is string && isValidId(data.subjectId)
+        && data.startTime is number && data.startTime > 0
+        && data.endTime is number && data.endTime >= data.startTime
+        && data.durationSeconds is number && data.durationSeconds >= 1 && data.durationSeconds <= 86400
+        && data.mode in ['stopwatch', 'pomodoro']
+        && data.note is string && data.note.size() <= 200
+        && data.createdAt is timestamp;
+    }
+
+    function isValidTodoItem(data, userId, todoId) {
+      return data.keys().hasAll(['id', 'userId', 'subjectId', 'title', 'completed', 'studyDayKey', 'estimatedMinutes', 'createdAt'])
+        && data.keys().hasOnly(['id', 'userId', 'subjectId', 'title', 'completed', 'studyDayKey', 'estimatedMinutes', 'createdAt'])
+        && data.id is string && data.id == todoId && isValidId(data.id)
+        && data.userId is string && data.userId == userId && isValidId(data.userId)
+        && data.subjectId is string && isValidId(data.subjectId)
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 140
+        && data.completed is bool
+        && isValidDateKey(data.studyDayKey)
+        && data.estimatedMinutes is number && data.estimatedMinutes >= 5 && data.estimatedMinutes <= 720
+        && data.createdAt is timestamp;
+    }
+
+    function isValidDDayTarget(data, userId, ddayId) {
+      return data.keys().hasAll(['id', 'userId', 'title', 'targetDate', 'isPinned', 'createdAt'])
+        && data.keys().hasOnly(['id', 'userId', 'title', 'targetDate', 'isPinned', 'createdAt'])
+        && data.id is string && data.id == ddayId && isValidId(data.id)
+        && data.userId is string && data.userId == userId && isValidId(data.userId)
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 80
+        && isValidDateKey(data.targetDate)
+        && data.isPinned is bool
+        && data.createdAt is timestamp;
+    }
+
+    function isValidLeaderboardEntry(data, userId) {
+      return data.keys().hasAll([
+          'userId',
+          'isPublic',
+          'name',
+          'category',
+          'status',
+          'currentSubject',
+          'dailySeconds',
+          'weeklySeconds',
+          'monthlySeconds',
+          'streakDays',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'userId',
+          'isPublic',
+          'name',
+          'category',
+          'status',
+          'currentSubject',
+          'dailySeconds',
+          'weeklySeconds',
+          'monthlySeconds',
+          'streakDays',
+          'updatedAt'
+        ])
+        && data.userId is string && data.userId == userId && isValidId(data.userId)
+        && data.isPublic is bool
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 60
+        && data.category is string && data.category.size() >= 1 && data.category.size() <= 50
+        && data.status in ['studying', 'resting', 'offline']
+        && data.currentSubject is string && data.currentSubject.size() <= 60
+        && data.dailySeconds is number && data.dailySeconds >= 0 && data.dailySeconds <= 86400
+        && data.weeklySeconds is number && data.weeklySeconds >= 0 && data.weeklySeconds <= 604800
+        && data.monthlySeconds is number && data.monthlySeconds >= 0 && data.monthlySeconds <= 2678400
+        && data.streakDays is number && data.streakDays >= 0 && data.streakDays <= 3650
+        && data.updatedAt is timestamp && data.updatedAt == request.time;
+    }
+
+    function isValidStudyGroup(data, groupId) {
+      return data.keys().hasAll(['id', 'ownerId', 'name', 'category', 'description', 'maxMembers', 'dailyMinHours', 'isPrivate', 'createdAt'])
+        && data.keys().hasOnly(['id', 'ownerId', 'name', 'category', 'description', 'maxMembers', 'dailyMinHours', 'isPrivate', 'createdAt'])
+        && data.id is string && data.id == groupId && isValidId(data.id)
+        && data.ownerId is string && isValidId(data.ownerId)
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 80
+        && data.category is string && data.category.size() >= 1 && data.category.size() <= 50
+        && data.description is string && data.description.size() <= 240
+        && data.maxMembers is number && data.maxMembers >= 2 && data.maxMembers <= 100
+        && data.dailyMinHours is number && data.dailyMinHours >= 1 && data.dailyMinHours <= 16
+        && data.isPrivate is bool
+        && data.createdAt is timestamp;
+    }
+
+    function isValidGroupMember(data, groupId, memberId) {
+      return data.keys().hasAll([
+          'id',
+          'groupId',
+          'userId',
+          'isPrivateGroup',
+          'name',
+          'avatarInitials',
+          'status',
+          'currentSubject',
+          'baseTodaySeconds',
+          'dailyGoalHours',
+          'wakesReceived',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'groupId',
+          'userId',
+          'isPrivateGroup',
+          'name',
+          'avatarInitials',
+          'status',
+          'currentSubject',
+          'baseTodaySeconds',
+          'dailyGoalHours',
+          'wakesReceived',
+          'updatedAt'
+        ])
+        && data.id is string && data.id == memberId && isValidId(data.id)
+        && data.groupId is string && data.groupId == groupId && isValidId(data.groupId)
+        && data.userId is string && isValidId(data.userId)
+        && data.isPrivateGroup is bool
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 60
+        && data.avatarInitials is string && data.avatarInitials.size() >= 1 && data.avatarInitials.size() <= 4
+        && data.status in ['studying', 'resting', 'offline']
+        && data.currentSubject is string && data.currentSubject.size() <= 60
+        && data.baseTodaySeconds is number && data.baseTodaySeconds >= 0 && data.baseTodaySeconds <= 86400
+        && data.dailyGoalHours is number && data.dailyGoalHours >= 1 && data.dailyGoalHours <= 18
+        && data.wakesReceived is number && data.wakesReceived >= 0 && data.wakesReceived <= 100000
+        && data.updatedAt is timestamp && data.updatedAt == request.time;
+    }
+
+    function isValidGroupMission(data, groupId, missionId) {
+      return data.keys().hasAll([
+          'id',
+          'groupId',
+          'authorId',
+          'isPrivateGroup',
+          'authorName',
+          'title',
+          'studyHoursLogged',
+          'cheers',
+          'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'groupId',
+          'authorId',
+          'isPrivateGroup',
+          'authorName',
+          'title',
+          'studyHoursLogged',
+          'cheers',
+          'createdAt'
+        ])
+        && data.id is string && data.id == missionId && isValidId(data.id)
+        && data.groupId is string && data.groupId == groupId && isValidId(data.groupId)
+        && data.authorId is string && isValidId(data.authorId)
+        && data.isPrivateGroup is bool
+        && data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 60
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 160
+        && data.studyHoursLogged is string && data.studyHoursLogged.size() >= 1 && data.studyHoursLogged.size() <= 24
+        && data.cheers is number && data.cheers >= 0 && data.cheers <= 100000
+        && data.createdAt is timestamp;
+    }
+
+    // 1. Private User Workspace & Subcollections
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isOwner(userId);
+      allow create: if isVerifiedUser()
+        && isValidId(userId)
+        && isOwner(userId)
+        && isValidUserWorkspace(incoming(), userId);
+      allow update: if isVerifiedUser()
+        && isValidId(userId)
+        && isOwner(userId)
+        && isValidUserWorkspace(incoming(), userId)
+        && incoming().uid == existing().uid
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'theme',
+          'activeTimerMode',
+          'profileName',
+          'profileCategory',
+          'dailyGoalHours',
+          'resetHour',
+          'motto',
+          'pomodoroFocusMinutes',
+          'pomodoroShortBreakMinutes',
+          'pomodoroLongBreakMinutes',
+          'pomodoroCyclesBeforeLongBreak',
+          'autoPauseOnTabSwitch',
+          'allowedTools',
+          'showFloatingGoalBar',
+          'coins',
+          'unlockedPacks',
+          'proAllAccess',
+          'claimedPeriodKeys',
+          'accentTheme',
+          'checkedInToday',
+          'updatedAt'
+        ]);
+      allow delete: if isVerifiedUser() && isValidId(userId) && isOwner(userId);
+
+      match /subjects/{subjectId} {
+        allow get: if isValidId(userId) && isValidId(subjectId) && isOwner(userId);
+        allow list: if isOwner(userId) && existing().userId == request.auth.uid;
+        allow create: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(subjectId)
+          && isOwner(userId)
+          && isValidSubject(incoming(), userId, subjectId)
+          && incoming().createdAt == request.time
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow update: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(subjectId)
+          && isOwner(userId)
+          && isValidSubject(incoming(), userId, subjectId)
+          && incoming().id == existing().id
+          && incoming().userId == existing().userId
+          && incoming().createdAt == existing().createdAt
+          && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'color', 'dailyTargetMinutes', 'archived']);
+        allow delete: if isVerifiedUser() && isValidId(userId) && isValidId(subjectId) && isOwner(userId);
+      }
+
+      match /sessions/{sessionId} {
+        allow get: if isValidId(userId) && isValidId(sessionId) && isOwner(userId);
+        allow list: if isOwner(userId) && existing().userId == request.auth.uid;
+        allow create: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(sessionId)
+          && isOwner(userId)
+          && isValidStudySession(incoming(), userId, sessionId)
+          && incoming().createdAt == request.time
+          && exists(/databases/$(database)/documents/users/$(userId))
+          && exists(/databases/$(database)/documents/users/$(userId)/subjects/$(incoming().subjectId));
+        allow update: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(sessionId)
+          && isOwner(userId)
+          && isValidStudySession(incoming(), userId, sessionId)
+          && incoming().id == existing().id
+          && incoming().userId == existing().userId
+          && incoming().subjectId == existing().subjectId
+          && incoming().createdAt == existing().createdAt
+          && incoming().diff(existing()).affectedKeys().hasOnly(['note']);
+        allow delete: if isVerifiedUser() && isValidId(userId) && isValidId(sessionId) && isOwner(userId);
+      }
+
+      match /todos/{todoId} {
+        allow get: if isValidId(userId) && isValidId(todoId) && isOwner(userId);
+        allow list: if isOwner(userId) && existing().userId == request.auth.uid;
+        allow create: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(todoId)
+          && isOwner(userId)
+          && isValidTodoItem(incoming(), userId, todoId)
+          && incoming().createdAt == request.time
+          && exists(/databases/$(database)/documents/users/$(userId))
+          && (incoming().subjectId == 'general' || exists(/databases/$(database)/documents/users/$(userId)/subjects/$(incoming().subjectId)));
+        allow update: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(todoId)
+          && isOwner(userId)
+          && isValidTodoItem(incoming(), userId, todoId)
+          && incoming().id == existing().id
+          && incoming().userId == existing().userId
+          && incoming().subjectId == existing().subjectId
+          && incoming().createdAt == existing().createdAt
+          && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'completed', 'studyDayKey', 'estimatedMinutes']);
+        allow delete: if isVerifiedUser() && isValidId(userId) && isValidId(todoId) && isOwner(userId);
+      }
+
+      match /ddays/{ddayId} {
+        allow get: if isValidId(userId) && isValidId(ddayId) && isOwner(userId);
+        allow list: if isOwner(userId) && existing().userId == request.auth.uid;
+        allow create: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(ddayId)
+          && isOwner(userId)
+          && isValidDDayTarget(incoming(), userId, ddayId)
+          && incoming().createdAt == request.time
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow update: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(ddayId)
+          && isOwner(userId)
+          && isValidDDayTarget(incoming(), userId, ddayId)
+          && incoming().id == existing().id
+          && incoming().userId == existing().userId
+          && incoming().createdAt == existing().createdAt
+          && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'targetDate', 'isPinned']);
+        allow delete: if isVerifiedUser() && isValidId(userId) && isValidId(ddayId) && isOwner(userId);
+      }
+    }
+
+    // 2. Public Non-PII Leaderboard
+    match /leaderboard/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (existing().isPublic == true || isOwner(userId));
+      allow list: if isSignedIn() && (existing().isPublic == true || existing().userId == request.auth.uid);
+      allow create: if isVerifiedUser()
+        && isValidId(userId)
+        && isOwner(userId)
+        && isValidLeaderboardEntry(incoming(), userId);
+      allow update: if isVerifiedUser()
+        && isValidId(userId)
+        && isOwner(userId)
+        && isValidLeaderboardEntry(incoming(), userId)
+        && incoming().userId == existing().userId
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'isPublic',
+          'name',
+          'category',
+          'status',
+          'currentSubject',
+          'dailySeconds',
+          'weeklySeconds',
+          'monthlySeconds',
+          'streakDays',
+          'updatedAt'
+        ]);
+      allow delete: if isVerifiedUser() && isValidId(userId) && isOwner(userId);
+    }
+
+    // 3. Shared Study Groups & Subcollections (Master Gate)
+    match /studyGroups/{groupId} {
+      allow get: if isSignedIn() && isValidId(groupId) && (existing().isPrivate == false || existing().ownerId == request.auth.uid);
+      allow list: if isSignedIn() && (existing().isPrivate == false || existing().ownerId == request.auth.uid);
+      allow create: if isVerifiedUser()
+        && isValidId(groupId)
+        && isValidStudyGroup(incoming(), groupId)
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(groupId)
+        && existing().ownerId == request.auth.uid
+        && isValidStudyGroup(incoming(), groupId)
+        && incoming().id == existing().id
+        && incoming().ownerId == existing().ownerId
+        && incoming().isPrivate == existing().isPrivate
+        && incoming().createdAt == existing().createdAt
+        && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'category', 'description', 'maxMembers', 'dailyMinHours']);
+      allow delete: if isVerifiedUser() && isValidId(groupId) && existing().ownerId == request.auth.uid;
+
+      match /members/{memberId} {
+        allow get: if isSignedIn()
+          && isValidId(groupId)
+          && isValidId(memberId)
+          && (get(/databases/$(database)/documents/studyGroups/$(groupId)).data.isPrivate == false
+            || get(/databases/$(database)/documents/studyGroups/$(groupId)).data.ownerId == request.auth.uid
+            || existing().userId == request.auth.uid);
+        allow list: if isSignedIn() && (existing().isPrivateGroup == false || existing().userId == request.auth.uid);
+        allow create: if isVerifiedUser()
+          && isValidId(groupId)
+          && isValidId(memberId)
+          && isValidGroupMember(incoming(), groupId, memberId)
+          && incoming().userId == request.auth.uid
+          && memberId == request.auth.uid
+          && exists(/databases/$(database)/documents/studyGroups/$(groupId))
+          && incoming().isPrivateGroup == get(/databases/$(database)/documents/studyGroups/$(groupId)).data.isPrivate
+          && (get(/databases/$(database)/documents/studyGroups/$(groupId)).data.isPrivate == false
+            || get(/databases/$(database)/documents/studyGroups/$(groupId)).data.ownerId == request.auth.uid);
+        allow update: if isVerifiedUser()
+          && isValidId(groupId)
+          && isValidId(memberId)
+          && isValidGroupMember(incoming(), groupId, memberId)
+          && incoming().id == existing().id
+          && incoming().groupId == existing().groupId
+          && incoming().userId == existing().userId
+          && incoming().isPrivateGroup == existing().isPrivateGroup
+          && (
+            (existing().userId == request.auth.uid
+              && incoming().diff(existing()).affectedKeys().hasOnly([
+                'name',
+                'avatarInitials',
+                'status',
+                'currentSubject',
+                'baseTodaySeconds',
+                'dailyGoalHours',
+                'updatedAt'
+              ]))
+            || (incoming().diff(existing()).affectedKeys().hasOnly(['wakesReceived', 'updatedAt'])
+              && incoming().wakesReceived == existing().wakesReceived + 1
+              && exists(/databases/$(database)/documents/studyGroups/$(groupId)/members/$(request.auth.uid)))
+          );
+        allow delete: if isVerifiedUser()
+          && isValidId(groupId)
+          && isValidId(memberId)
+          && (existing().userId == request.auth.uid
+            || get(/databases/$(database)/documents/studyGroups/$(groupId)).data.ownerId == request.auth.uid);
+      }
+
+      match /missions/{missionId} {
+        allow get: if isSignedIn()
+          && isValidId(groupId)
+          && isValidId(missionId)
+          && (get(/databases/$(database)/documents/studyGroups/$(groupId)).data.isPrivate == false
+            || get(/databases/$(database)/documents/studyGroups/$(groupId)).data.ownerId == request.auth.uid);
+        allow list: if isSignedIn() && (existing().isPrivateGroup == false || existing().authorId == request.auth.uid);
+        allow create: if isVerifiedUser()
+          && isValidId(groupId)
+          && isValidId(missionId)
+          && isValidGroupMission(incoming(), groupId, missionId)
+          && incoming().authorId == request.auth.uid
+          && incoming().cheers == 1
+          && incoming().createdAt == request.time
+          && exists(/databases/$(database)/documents/studyGroups/$(groupId))
+          && incoming().isPrivateGroup == get(/databases/$(database)/documents/studyGroups/$(groupId)).data.isPrivate
+          && exists(/databases/$(database)/documents/studyGroups/$(groupId)/members/$(request.auth.uid));
+        allow update: if isVerifiedUser()
+          && isValidId(groupId)
+          && isValidId(missionId)
+          && isValidGroupMission(incoming(), groupId, missionId)
+          && incoming().id == existing().id
+          && incoming().groupId == existing().groupId
+          && incoming().authorId == existing().authorId
+          && incoming().isPrivateGroup == existing().isPrivateGroup
+          && incoming().createdAt == existing().createdAt
+          && incoming().diff(existing()).affectedKeys().hasOnly(['cheers'])
+          && incoming().cheers == existing().cheers + 1
+          && exists(/databases/$(database)/documents/studyGroups/$(groupId)/members/$(request.auth.uid));
+        allow delete: if isVerifiedUser()
+          && isValidId(groupId)
+          && isValidId(missionId)
+          && (existing().authorId == request.auth.uid
+            || get(/databases/$(database)/documents/studyGroups/$(groupId)).data.ownerId == request.auth.uid);
+      }
+    }
+  }
+}
