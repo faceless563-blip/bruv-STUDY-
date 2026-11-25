@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Cloud, Lock, LogIn, LogOut, Palette, Plus, RotateCcw, ShieldCheck, X } from 'lucide-react';
+import { Check, Cloud, Copy, ExternalLink, Lock, LogIn, LogOut, Palette, Plus, RotateCcw, ShieldCheck, X } from 'lucide-react';
 import {
   AccentTheme,
   FeaturePackId,
@@ -77,6 +77,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   const [newAllowedTool, setNewAllowedTool] = useState('');
   const [savedNotice, setSavedNotice] = useState('');
+  const [copiedDomain, setCopiedDomain] = useState(false);
 
   useEffect(() => {
     setName(profile.name);
@@ -177,12 +178,43 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         {authError && !authUser && (
           <div
             role="alert"
-            className="rounded-lg border border-red-200 dark:border-red-500/30 bg-red-50/80 dark:bg-red-500/10 px-3.5 py-2.5 text-xs text-red-700 dark:text-red-300 space-y-1"
+            className="rounded-lg border border-red-200 dark:border-red-500/30 bg-red-50/80 dark:bg-red-500/10 px-3.5 py-3 text-xs text-red-700 dark:text-red-300 space-y-2"
           >
             <div className="font-semibold">
               {authError.title} ({authError.code})
             </div>
             <div>{authError.actionHint}</div>
+            {(authError.unauthorizedDomain || authError.consoleSettingsUrl) && (
+              <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                {authError.unauthorizedDomain && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!authError.unauthorizedDomain || !navigator?.clipboard) return;
+                      void navigator.clipboard.writeText(authError.unauthorizedDomain).then(() => {
+                        setCopiedDomain(true);
+                        window.setTimeout(() => setCopiedDomain(false), 2000);
+                      }).catch(() => {});
+                    }}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-red-300 dark:border-red-500/40 bg-white dark:bg-neutral-900 text-red-700 dark:text-red-200 font-medium cursor-pointer"
+                  >
+                    {copiedDomain ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                    <span>{copiedDomain ? 'Copied' : `Copy ${authError.unauthorizedDomain}`}</span>
+                  </button>
+                )}
+                {authError.consoleSettingsUrl && (
+                  <a
+                    href={authError.consoleSettingsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-red-300 dark:border-red-500/40 bg-white dark:bg-neutral-900 text-red-700 dark:text-red-200 font-medium hover:underline"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    <span>Open Firebase Console</span>
+                  </a>
+                )}
+              </div>
+            )}
           </div>
         )}
       </section>

@@ -67,13 +67,21 @@ export const AuthErrorModal: React.FC<AuthErrorModalProps> = ({
           {error.message}
         </p>
 
-        <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/70 p-3 space-y-2">
+        <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/70 p-3.5 space-y-2.5">
           <div className="text-xs font-semibold text-neutral-800 dark:text-neutral-200">
             How to fix
           </div>
-          <p className="text-xs text-neutral-600 dark:text-neutral-400 leading-relaxed">
-            {error.actionHint}
-          </p>
+          {error.steps && error.steps.length > 0 ? (
+            <ol className="list-decimal list-inside space-y-1.5 text-xs text-neutral-600 dark:text-neutral-400 leading-relaxed">
+              {error.steps.map((step, i) => (
+                <li key={i}>{step}</li>
+              ))}
+            </ol>
+          ) : (
+            <p className="text-xs text-neutral-600 dark:text-neutral-400 leading-relaxed">
+              {error.actionHint}
+            </p>
+          )}
 
           {error.unauthorizedDomain && (
             <div className="pt-1 flex items-center justify-between gap-2">
@@ -92,7 +100,22 @@ export const AuthErrorModal: React.FC<AuthErrorModalProps> = ({
           )}
         </div>
 
+        <p className="text-[11px] text-neutral-500 dark:text-neutral-400">
+          Your local study hours, tasks, and coins stay saved in this browser until cloud sync connects.
+        </p>
+
         <div className="flex flex-wrap items-center justify-end gap-2.5 pt-1">
+          {error.consoleSettingsUrl && (
+            <a
+              href={error.consoleSettingsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800 text-xs font-medium text-neutral-700 dark:text-neutral-200"
+            >
+              <ExternalLink className="w-3.5 h-3.5 text-orange-500" />
+              <span>Open Firebase Console</span>
+            </a>
+          )}
           {error.inIframe && (
             <a
               href={currentHref}

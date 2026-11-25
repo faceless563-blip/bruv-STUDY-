@@ -39,6 +39,7 @@ interface ActiveFocusOverlayProps {
   onCompleteSession: (elapsedFocusSeconds: number, note: string) => void;
   onDiscardSession: () => void;
   onRequestUnlock: (packId: FeaturePackId) => void;
+  onTickFocusSeconds?: (elapsedFocusSeconds: number) => void;
 }
 
 export const ActiveFocusOverlay: React.FC<ActiveFocusOverlayProps> = ({
@@ -57,6 +58,7 @@ export const ActiveFocusOverlay: React.FC<ActiveFocusOverlayProps> = ({
   onCompleteSession,
   onDiscardSession,
   onRequestUnlock,
+  onTickFocusSeconds,
 }) => {
   const effectivePomodoro: PomodoroConfig = customPomodoroUnlocked
     ? pomodoroConfig
@@ -84,8 +86,13 @@ export const ActiveFocusOverlay: React.FC<ActiveFocusOverlayProps> = ({
   useEffect(() => {
     return () => {
       soundEngine.stopAmbient();
+      onTickFocusSeconds?.(0);
     };
-  }, []);
+  }, [onTickFocusSeconds]);
+
+  useEffect(() => {
+    onTickFocusSeconds?.(focusElapsedSeconds);
+  }, [focusElapsedSeconds, onTickFocusSeconds]);
 
   // Desktop Focus Guard: auto-pause when user leaves the tab/window
   useEffect(() => {

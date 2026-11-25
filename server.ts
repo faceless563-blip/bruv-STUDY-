@@ -326,8 +326,41 @@ async function startServer() {
 
   if (!isProduction) {
     const { createServer } = await import('vite');
+    const hmrDisabled = process.env.ENABLE_HMR !== 'true';
     const vite = await createServer({
-      server: { middlewareMode: true },
+      plugins: hmrDisabled
+        ? [
+            {
+              name: 'disable-hmr-websocket',
+              enforce: 'post',
+              transform(code) {
+                if (
+                  code.includes('createWebSocketModuleRunnerTransport({') &&
+                  code.includes('vite-hmr')
+                ) {
+                  return {
+                    code: code.replace(
+                      /let wsTransport = createWebSocketModuleRunnerTransport\(\{[\s\S]*?\}\);/,
+                      `let wsTransport = {
+                        async connect({ onMessage }) {
+                          onMessage({ type: "connected" });
+                        },
+                        async disconnect() {},
+                        send() {},
+                      };`
+                    ),
+                    map: null,
+                  };
+                }
+              },
+            },
+          ]
+        : [],
+      server: {
+        middlewareMode: true,
+        hmr: hmrDisabled ? false : undefined,
+        ws: hmrDisabled ? false : undefined,
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);

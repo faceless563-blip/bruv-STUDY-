@@ -41,6 +41,11 @@ import { UnlockModal } from './components/UnlockModal';
 import { QuickStartModal } from './components/QuickStartModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { AuthErrorModal } from './components/AuthErrorModal';
+import {
+  DesktopWidgetController,
+  DesktopWidgetMode,
+  openDocumentPipWindow,
+} from './components/DesktopWidget';
 import { ParsedAuthError, parseFirebaseAuthError } from './utils/authErrorLogic';
 import { createDefaultWallet, createEmptyState } from './data/seedData';
 import {
@@ -117,6 +122,13 @@ export default function App() {
   const [sessionStartMs, setSessionStartMs] = useState<number | null>(null);
   const [unlockPackId, setUnlockPackId] = useState<FeaturePackId | null>(null);
   const [quickStartOpen, setQuickStartOpen] = useState(false);
+  const [liveFocusSeconds, setLiveFocusSeconds] = useState(0);
+  const [widgetMode, setWidgetMode] = useState<DesktopWidgetMode>('closed');
+  const [pipWindow, setPipWindow] = useState<Window | null>(null);
+  const [pipContainer, setPipContainer] = useState<HTMLElement | null>(null);
+  const [selectedWidgetDDayId, setSelectedWidgetDDayId] = useState<string | null>(
+    null
+  );
   const [authUser, setAuthUser] = useState<{
     uid: string;
     email: string | null;
@@ -400,6 +412,40 @@ export default function App() {
     });
   };
 
+  const handleCloseWidget = () => {
+    if (pipWindow && !pipWindow.closed) {
+      pipWindow.close();
+    }
+    setPipWindow(null);
+    setPipContainer(null);
+    setWidgetMode('closed');
+  };
+
+  const handleToggleWidget = async () => {
+    if (widgetMode !== 'closed') {
+      handleCloseWidget();
+      return;
+    }
+
+    const pip = await openDocumentPipWindow(
+      state.theme,
+      state.wallet?.accentTheme ?? 'orange'
+    );
+    if (pip) {
+      pip.pipWindow.addEventListener('pagehide', () => {
+        setPipWindow(null);
+        setPipContainer(null);
+        setWidgetMode('closed');
+      });
+      setPipWindow(pip.pipWindow);
+      setPipContainer(pip.container);
+      setWidgetMode('pip');
+      return;
+    }
+
+    setWidgetMode('floating');
+  };
+
   const handleToggleTheme = () => {
     const nextState: AppState = {
       ...state,
@@ -507,11 +553,20 @@ export default function App() {
   };
 
   const handleDeleteSubject = (id: string) => {
+    const affectedTodos = state.todos
+      .filter((t) => t.subjectId === id)
+      .map((t) => ({ ...t, subjectId: 'general' }));
     setState((prev) => ({
       ...prev,
       subjects: prev.subjects.filter((s) => s.id !== id),
+      todos: prev.todos.map((t) => (t.subjectId === id ? { ...t, subjectId: 'general' } : t)),
     }));
-    if (authUser) runCloudTask(() => deleteSubjectDoc(authUser.uid, id));
+    if (authUser) {
+      for (const todo of affectedTodos) {
+        runCloudTask(() => upsertTodoDoc(authUser.uid, todo));
+      }
+      runCloudTask(() => deleteSubjectDoc(authUser.uid, id));
+    }
   };
 
   const handleAddDDay = (title: string, targetDate: string) => {
@@ -917,6 +972,10 @@ export default function App() {
           pinnedDDay={pinnedDDay}
           focusGuardEnabled={focusLockUnlocked && state.focusGuard.autoPauseOnTabSwitch}
           coins={state.wallet.coins}
+          widgetOpen={widgetMode !== 'closed'}
+          onToggleWidget={() => {
+            void handleToggleWidget();
+          }}
           onOpenVault={() => setActiveTab('vault')}
           onQuickStart={handleQuickStart}
         />
@@ -1065,6 +1124,7 @@ export default function App() {
           onCompleteSession={handleCompleteSession}
           onDiscardSession={handleDiscardSession}
           onRequestUnlock={handleOpenUnlockModal}
+          onTickFocusSeconds={setLiveFocusSeconds}
         />
       )}
 
@@ -1097,6 +1157,22 @@ export default function App() {
           onClose={() => setAuthError(null)}
         />
       )}
+
+      <DesktopWidgetController
+        mode={widgetMode}
+        pipContainer={pipContainer}
+        pipWindow={pipWindow}
+        state={state}
+        liveFocusSeconds={activeSubject ? liveFocusSeconds : 0}
+        activeSubject={activeSubject}
+        selectedDDayId={selectedWidgetDDayId}
+        onSelectDDayId={setSelectedWidgetDDayId}
+        onAddDDay={handleAddDDay}
+        onStartSubject={handleStartSubject}
+        onOpenQuickStart={handleQuickStart}
+        onToggleTheme={handleToggleTheme}
+        onClose={handleCloseWidget}
+      />
 
       <OfflineIndicator />
     </div>

@@ -11,15 +11,20 @@ test('extractAuthErrorCode parses FirebaseError objects and message strings', ()
   assert.equal(extractAuthErrorCode(new Error('Something broke')), 'auth/unknown');
 });
 
-test('parseFirebaseAuthError provides actionable unauthorized-domain guidance with hostname', () => {
+test('parseFirebaseAuthError provides actionable unauthorized-domain guidance with hostname and console URL', () => {
   const parsed = parseFirebaseAuthError(
     { code: 'auth/unauthorized-domain' },
-    { hostname: 'bruv-study.vercel.app', inIframe: false, firebaseProjectId: 'savvy-proxy-7sjh2' }
+    { hostname: 'bruv-study-five.vercel.app', inIframe: false, firebaseProjectId: 'savvy-proxy-7sjh2' }
   );
   assert.equal(parsed.code, 'auth/unauthorized-domain');
-  assert.equal(parsed.unauthorizedDomain, 'bruv-study.vercel.app');
-  assert.ok(parsed.message.includes('bruv-study.vercel.app'));
+  assert.equal(parsed.unauthorizedDomain, 'bruv-study-five.vercel.app');
+  assert.ok(parsed.message.includes('bruv-study-five.vercel.app'));
   assert.ok(parsed.actionHint.includes('Authorized domains'));
+  assert.equal(
+    parsed.consoleSettingsUrl,
+    'https://console.firebase.google.com/project/savvy-proxy-7sjh2/authentication/settings'
+  );
+  assert.equal(parsed.steps?.length, 3);
 });
 
 test('parseFirebaseAuthError differentiates iframe vs top-level popup-blocked guidance', () => {

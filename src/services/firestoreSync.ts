@@ -172,7 +172,11 @@ export async function ensureUserWorkspaceInitialized(
       }
     }
     for (const todo of seededState.todos) {
-      await upsertTodoDoc(uid, todo);
+      const safeTodo: TodoItem =
+        todo.subjectId === 'general' || validSubjectIds.has(sanitizeId(todo.subjectId))
+          ? todo
+          : { ...todo, subjectId: 'general' };
+      await upsertTodoDoc(uid, safeTodo);
     }
     return true;
   } catch (error) {

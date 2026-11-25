@@ -4,6 +4,8 @@ export interface ParsedAuthError {
   message: string;
   actionHint: string;
   unauthorizedDomain?: string;
+  consoleSettingsUrl?: string;
+  steps?: string[];
   inIframe: boolean;
 }
 
@@ -27,15 +29,24 @@ export function parseFirebaseAuthError(
   const code = extractAuthErrorCode(error);
   const host = context.hostname || 'this domain';
   const projectId = context.firebaseProjectId || 'savvy-proxy-7sjh2';
+  const authSettingsUrl = `https://console.firebase.google.com/project/${encodeURIComponent(
+    projectId
+  )}/authentication/settings`;
 
   switch (code) {
     case 'auth/unauthorized-domain':
       return {
         code,
         title: 'Domain Not Authorized for Google Sign-In',
-        message: `Google Sign-In was blocked because "${host}" is not listed in Firebase Authentication Authorized Domains for project "${projectId}".`,
-        actionHint: `Add "${host}" in Firebase Console → Authentication → Settings → Authorized domains, or sign in from an authorized app URL.`,
+        message: `Firebase blocked Google Sign-In because "${host}" is not yet in Authorized Domains for project "${projectId}".`,
+        actionHint: `Copy "${host}", open Firebase Console → Authentication → Settings → Authorized domains, click Add domain, paste "${host}", and click Try Again.`,
         unauthorizedDomain: host,
+        consoleSettingsUrl: authSettingsUrl,
+        steps: [
+          `Click "Copy domain" below to copy "${host}".`,
+          'Click "Open Firebase Console" → scroll to Authorized domains → click Add domain and paste it.',
+          'Return to this tab and click "Try Again".',
+        ],
         inIframe: context.inIframe,
       };
 
@@ -68,6 +79,9 @@ export function parseFirebaseAuthError(
         title: 'Google Provider Disabled',
         message: 'Google Sign-In is not currently enabled in Firebase Authentication.',
         actionHint: `Enable the Google sign-in provider under Firebase Console → Authentication → Sign-in method for "${projectId}".`,
+        consoleSettingsUrl: `https://console.firebase.google.com/project/${encodeURIComponent(
+          projectId
+        )}/authentication/providers`,
         inIframe: context.inIframe,
       };
 
