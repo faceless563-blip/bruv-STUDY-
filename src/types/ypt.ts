@@ -1,6 +1,7 @@
 export type TabId =
   | 'timer'
   | 'planner'
+  | 'ai'
   | 'insights'
   | 'groups'
   | 'rankings'
@@ -10,6 +11,36 @@ export type TabId =
 export type TimerMode = 'stopwatch' | 'pomodoro';
 
 export type PomodoroPhase = 'focus' | 'shortBreak' | 'longBreak';
+
+export type AiTier = 'free' | 'premium' | 'ultimate';
+
+export interface AiTierDefinition {
+  id: AiTier;
+  name: string;
+  tagline: string;
+  dailyLimit: number | null; // null = Unlimited
+  coinCost: number;
+}
+
+export interface AiPlanTaskSuggestion {
+  id: string;
+  title: string;
+  subjectId: string;
+  subjectName: string;
+  estimatedMinutes: number;
+  studyDayKey: string;
+  rationale: string;
+}
+
+export interface AiCoachMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  planSummary?: string;
+  suggestedTasks?: AiPlanTaskSuggestion[];
+  addedTaskIds?: string[];
+  timestampMs: number;
+}
 
 export type FeaturePackId =
   | 'focus_lock'
@@ -69,6 +100,9 @@ export interface WalletState {
   claimedPeriodKeys: string[];
   accentTheme: AccentTheme;
   purchaseHistory: PurchaseReceipt[];
+  aiTier: AiTier;
+  aiUsageDayKey: string;
+  aiMessagesUsedToday: number;
 }
 
 export const STUDY_CATEGORIES = [

@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   BarChart3,
+  Bot,
   CalendarClock,
   Coins,
   Flame,
@@ -42,6 +43,7 @@ interface SidebarProps {
 const NAV_ITEMS: Array<{ id: TabId; label: string; icon: React.ComponentType<{ className?: string }> }> = [
   { id: 'timer', label: 'Timer & Subjects', icon: Timer },
   { id: 'planner', label: '10-Min Planner', icon: CalendarClock },
+  { id: 'ai', label: 'AI Study Coach', icon: Bot },
   { id: 'insights', label: 'Insights & Flame', icon: BarChart3 },
   { id: 'groups', label: 'Study Groups', icon: Users },
   { id: 'rankings', label: 'Rankings', icon: Trophy },

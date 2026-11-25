@@ -19,6 +19,9 @@ export function createDefaultWallet(): WalletState {
     claimedPeriodKeys: [],
     accentTheme: 'orange',
     purchaseHistory: [],
+    aiTier: 'free',
+    aiUsageDayKey: '',
+    aiMessagesUsedToday: 0,
   };
 }
 

@@ -33,6 +33,9 @@ test('firestore.rules enforces Eight Pillars hardened constraints', () => {
   assert.match(rulesText, /isValidId\(/);
   assert.match(rulesText, /affectedKeys\(\)\.hasOnly\(/);
   assert.match(rulesText, /request\.time/);
+  assert.match(rulesText, /aiTier in \['free', 'premium', 'ultimate'\]/);
+  assert.match(rulesText, /aiUsageDayKey/);
+  assert.match(rulesText, /aiMessagesUsedToday/);
   // Never allow blanket list reads
   assert.doesNotMatch(rulesText, /allow\s+list:\s*if\s+isSignedIn\(\)\s*;/);
 });

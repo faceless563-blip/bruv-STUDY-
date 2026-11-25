@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   ArrowRightCircle,
+  Bot,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -28,6 +29,7 @@ interface PlannerViewProps {
   onDeleteTodo: (todoId: string) => void;
   onRolloverTodos: (targetDayKey: string) => number;
   onLogManualSession: (subjectId: string, startTimeMs: number, durationMinutes: number, note: string) => void;
+  onOpenAiCoach?: () => void;
 }
 
 function shiftDayKey(dayKey: string, delta: number): string {
@@ -49,6 +51,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
   onDeleteTodo,
   onRolloverTodos,
   onLogManualSession,
+  onOpenAiCoach,
 }) => {
   const [selectedDayKey, setSelectedDayKey] = useState(todayKey);
   const [newTitle, setNewTitle] = useState('');
@@ -188,20 +191,32 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left: Subject To-Do List */}
         <section className="lg:col-span-5 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#14171D]">
-          <div className="px-5 py-4 border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between gap-3">
+          <div className="px-5 py-4 border-b border-neutral-200 dark:border-neutral-800 flex flex-wrap items-center justify-between gap-2.5">
             <h2 className="font-display font-semibold text-base text-neutral-900 dark:text-neutral-100">
               Daily To-Do List
             </h2>
-            {pastUnfinishedCount > 0 && (
-              <button
-                type="button"
-                onClick={handleRollover}
-                className="inline-flex items-center gap-1.5 text-xs font-medium text-orange-600 dark:text-orange-400 hover:underline cursor-pointer whitespace-nowrap"
-              >
-                <ArrowRightCircle className="w-3.5 h-3.5" />
-                <span>Rollover ({pastUnfinishedCount})</span>
-              </button>
-            )}
+            <div className="flex items-center gap-2.5">
+              {onOpenAiCoach && (
+                <button
+                  type="button"
+                  onClick={onOpenAiCoach}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-orange-200 dark:border-orange-500/30 bg-orange-50/70 dark:bg-orange-500/10 hover:bg-orange-100/80 dark:hover:bg-orange-500/20 text-xs font-medium text-orange-700 dark:text-orange-300 cursor-pointer whitespace-nowrap"
+                >
+                  <Bot className="w-3.5 h-3.5" />
+                  <span>Plan with AI</span>
+                </button>
+              )}
+              {pastUnfinishedCount > 0 && (
+                <button
+                  type="button"
+                  onClick={handleRollover}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-orange-600 dark:text-orange-400 hover:underline cursor-pointer whitespace-nowrap"
+                >
+                  <ArrowRightCircle className="w-3.5 h-3.5" />
+                  <span>Rollover ({pastUnfinishedCount})</span>
+                </button>
+              )}
+            </div>
           </div>
 
           {rolloverBanner && (

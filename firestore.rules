@@ -67,6 +67,9 @@ service cloud.firestore {
           'claimedPeriodKeys',
           'accentTheme',
           'checkedInToday',
+          'aiTier',
+          'aiUsageDayKey',
+          'aiMessagesUsedToday',
           'updatedAt'
         ])
         && data.keys().hasOnly([
@@ -91,6 +94,9 @@ service cloud.firestore {
           'claimedPeriodKeys',
           'accentTheme',
           'checkedInToday',
+          'aiTier',
+          'aiUsageDayKey',
+          'aiMessagesUsedToday',
           'updatedAt'
         ])
         && data.uid is string && data.uid == userId && isValidId(data.uid)
@@ -115,6 +121,9 @@ service cloud.firestore {
         && isBoundedStringList(data.claimedPeriodKeys, 500)
         && data.accentTheme in ['orange', 'cobalt', 'emerald', 'violet']
         && data.checkedInToday is bool
+        && data.aiTier in ['free', 'premium', 'ultimate']
+        && data.aiUsageDayKey is string && (data.aiUsageDayKey.size() == 0 || isValidDateKey(data.aiUsageDayKey))
+        && data.aiMessagesUsedToday is number && data.aiMessagesUsedToday >= 0 && data.aiMessagesUsedToday <= 1000
         && data.updatedAt is timestamp && data.updatedAt == request.time;
     }
 
@@ -332,6 +341,9 @@ service cloud.firestore {
           'claimedPeriodKeys',
           'accentTheme',
           'checkedInToday',
+          'aiTier',
+          'aiUsageDayKey',
+          'aiMessagesUsedToday',
           'updatedAt'
         ]);
       allow delete: if isVerifiedUser() && isValidId(userId) && isOwner(userId);

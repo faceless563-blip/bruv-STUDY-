@@ -79,6 +79,17 @@
         "checkedInToday": {
           "type": "boolean"
         },
+        "aiTier": {
+          "type": "string",
+          "enum": ["free", "premium", "ultimate"]
+        },
+        "aiUsageDayKey": {
+          "type": "string",
+          "maxLength": 10
+        },
+        "aiMessagesUsedToday": {
+          "type": "number"
+        },
         "updatedAt": {
           "type": "string",
           "format": "date-time"
@@ -106,6 +117,9 @@
         "claimedPeriodKeys",
         "accentTheme",
         "checkedInToday",
+        "aiTier",
+        "aiUsageDayKey",
+        "aiMessagesUsedToday",
         "updatedAt"
       ]
     },

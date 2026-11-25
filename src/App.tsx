@@ -37,19 +37,18 @@ import { GroupsView } from './components/GroupsView';
 import { RankingsView } from './components/RankingsView';
 import { SettingsView } from './components/SettingsView';
 import { VaultView } from './components/VaultView';
+import { AiCoachView } from './components/AiCoachView';
 import { UnlockModal } from './components/UnlockModal';
 import { QuickStartModal } from './components/QuickStartModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { AuthErrorModal } from './components/AuthErrorModal';
-import {
-  DesktopWidgetController,
-  DesktopWidgetMode,
-  openDocumentPipWindow,
-} from './components/DesktopWidget';
 import { ParsedAuthError, parseFirebaseAuthError } from './utils/authErrorLogic';
 import { createDefaultWallet, createEmptyState } from './data/seedData';
 import {
   AccentTheme,
+  AiCoachMessage,
+  AiPlanTaskSuggestion,
+  AiTier,
   AppState,
   ChallengeStatus,
   DDayTarget,
@@ -72,6 +71,14 @@ import {
   unlockPackWithCoins,
 } from './utils/economyLogic';
 import {
+  buildStudyPlannerContext,
+  consumeAiMessageQuota,
+  getAiQuotaStatus,
+  normalizeWalletState,
+  sanitizeSuggestedTasks,
+  unlockAiTierWithCoins,
+} from './utils/aiCoachLogic';
+import {
   computeStreakDays,
   computeSubjectTotals,
   formatDurationShort,
@@ -82,6 +89,7 @@ import {
 
 const STORAGE_KEY = 'ypt_desktop_state_v4';
 const SIDEBAR_COLLAPSED_KEY = 'ypt_sidebar_collapsed_v1';
+const AI_MESSAGES_KEY = 'ypt_ai_coach_messages_v1';
 
 function loadInitialSidebarCollapsed(): boolean {
   if (typeof window !== 'undefined') {
@@ -94,6 +102,23 @@ function loadInitialSidebarCollapsed(): boolean {
   return false;
 }
 
+function loadInitialAiMessages(): AiCoachMessage[] {
+  if (typeof window !== 'undefined') {
+    try {
+      const raw = window.localStorage.getItem(AI_MESSAGES_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          return parsed.slice(-40);
+        }
+      }
+    } catch {
+      // ignore invalid cache
+    }
+  }
+  return [];
+}
+
 function loadInitialState(): AppState {
   if (typeof window !== 'undefined') {
     try {
@@ -103,7 +128,7 @@ function loadInitialState(): AppState {
         if (parsed && Array.isArray(parsed.subjects) && Array.isArray(parsed.sessions)) {
           return {
             ...parsed,
-            wallet: parsed.wallet ?? createDefaultWallet(),
+            wallet: normalizeWalletState(parsed.wallet ?? createDefaultWallet()),
           };
         }
       }
@@ -122,13 +147,6 @@ export default function App() {
   const [sessionStartMs, setSessionStartMs] = useState<number | null>(null);
   const [unlockPackId, setUnlockPackId] = useState<FeaturePackId | null>(null);
   const [quickStartOpen, setQuickStartOpen] = useState(false);
-  const [liveFocusSeconds, setLiveFocusSeconds] = useState(0);
-  const [widgetMode, setWidgetMode] = useState<DesktopWidgetMode>('closed');
-  const [pipWindow, setPipWindow] = useState<Window | null>(null);
-  const [pipContainer, setPipContainer] = useState<HTMLElement | null>(null);
-  const [selectedWidgetDDayId, setSelectedWidgetDDayId] = useState<string | null>(
-    null
-  );
   const [authUser, setAuthUser] = useState<{
     uid: string;
     email: string | null;
@@ -138,6 +156,10 @@ export default function App() {
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [authError, setAuthError] = useState<ParsedAuthError | null>(null);
   const [syncError, setSyncError] = useState<Error | null>(null);
+  const [aiMessages, setAiMessages] = useState<AiCoachMessage[]>(loadInitialAiMessages);
+  const [aiSending, setAiSending] = useState(false);
+  const [aiError, setAiError] = useState('');
+  const [vaultSubTab, setVaultSubTab] = useState<'challenges' | 'vault'>('challenges');
 
   if (syncError) {
     throw syncError;
@@ -160,6 +182,15 @@ export default function App() {
       // ignore storage quota errors
     }
   }, [state]);
+
+  // Persist AI Coach chat history to localStorage
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(AI_MESSAGES_KEY, JSON.stringify(aiMessages.slice(-40)));
+    } catch {
+      // ignore storage quota errors
+    }
+  }, [aiMessages]);
 
   // Listen to Firebase Auth state & attach Firestore onSnapshot listeners only when authenticated
   useEffect(() => {
@@ -410,40 +441,6 @@ export default function App() {
       }
       return next;
     });
-  };
-
-  const handleCloseWidget = () => {
-    if (pipWindow && !pipWindow.closed) {
-      pipWindow.close();
-    }
-    setPipWindow(null);
-    setPipContainer(null);
-    setWidgetMode('closed');
-  };
-
-  const handleToggleWidget = async () => {
-    if (widgetMode !== 'closed') {
-      handleCloseWidget();
-      return;
-    }
-
-    const pip = await openDocumentPipWindow(
-      state.theme,
-      state.wallet?.accentTheme ?? 'orange'
-    );
-    if (pip) {
-      pip.pipWindow.addEventListener('pagehide', () => {
-        setPipWindow(null);
-        setPipContainer(null);
-        setWidgetMode('closed');
-      });
-      setPipWindow(pip.pipWindow);
-      setPipContainer(pip.container);
-      setWidgetMode('pip');
-      return;
-    }
-
-    setWidgetMode('floating');
   };
 
   const handleToggleTheme = () => {
@@ -890,6 +887,203 @@ export default function App() {
     if (authUser) runCloudTask(() => saveWorkspaceDoc(authUser.uid, nextState));
   };
 
+  const handleUnlockAiTier = (targetTier: AiTier) => {
+    const res = unlockAiTierWithCoins(state.wallet, targetTier);
+    if (!res.ok) return;
+    const nextState: AppState = {
+      ...state,
+      wallet: res.wallet,
+    };
+    setState(nextState);
+    if (authUser) runCloudTask(() => saveWorkspaceDoc(authUser.uid, nextState));
+  };
+
+  const handleSendAiMessage = async (promptText: string) => {
+    const trimmed = promptText.trim();
+    if (!trimmed || aiSending) return;
+
+    const currentSnapshot = stateRef.current;
+    const quota = getAiQuotaStatus(currentSnapshot.wallet, todayKey);
+    if (!quota.canSend) {
+      setAiError(
+        `You used all ${quota.dailyLimit} AI Coach messages for today. Upgrade in Vault or wait until your next study day.`
+      );
+      return;
+    }
+
+    setAiError('');
+    setAiSending(true);
+
+    const userMsg: AiCoachMessage = {
+      id: `ai-user-${Date.now()}`,
+      role: 'user',
+      content: trimmed,
+      timestampMs: Date.now(),
+    };
+    const historySnapshot = aiMessages.slice(-10).map((m) => ({
+      role: m.role,
+      content: m.content,
+    }));
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 32000);
+
+    try {
+      const res = await fetch('/api/ai/plan-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          message: trimmed,
+          history: historySnapshot,
+          context: buildStudyPlannerContext(currentSnapshot, todayKey),
+        }),
+      });
+
+      const contentType = res.headers.get('content-type') || '';
+      const isJson = contentType.includes('application/json');
+      const data = isJson
+        ? ((await res.json().catch(() => null)) as {
+            ok?: boolean;
+            message?: string;
+            reply?: string;
+            planSummary?: string;
+            suggestedTasks?: unknown;
+          } | null)
+        : null;
+
+      if (!res.ok || !data?.ok) {
+        if (data?.message) {
+          setAiError(data.message);
+        } else if (!isJson && res.ok) {
+          setAiError(
+            'AI Study Coach API endpoint is unavailable in this hosting mode. No daily messages were deducted.'
+          );
+        } else {
+          setAiError(
+            `AI Study Coach could not respond right now (HTTP ${res.status}). No daily messages were deducted.`
+          );
+        }
+        return;
+      }
+
+      const latestSnapshot = stateRef.current;
+      const quotaConsumption = consumeAiMessageQuota(latestSnapshot.wallet, todayKey);
+      if (quotaConsumption.ok) {
+        const updatedState: AppState = {
+          ...latestSnapshot,
+          wallet: quotaConsumption.wallet,
+        };
+        setState(updatedState);
+        if (authUser) {
+          runCloudTask(() => saveWorkspaceDoc(authUser.uid, updatedState));
+        }
+      }
+
+      const suggestedTasks = sanitizeSuggestedTasks(
+        data.suggestedTasks,
+        latestSnapshot.subjects,
+        todayKey
+      );
+
+      const assistantMsg: AiCoachMessage = {
+        id: `ai-assistant-${Date.now()}`,
+        role: 'assistant',
+        content: String(data.reply ?? '').trim() || 'Here is a study plan for your desk.',
+        planSummary: String(data.planSummary ?? '').trim() || undefined,
+        suggestedTasks,
+        addedTaskIds: [],
+        timestampMs: Date.now(),
+      };
+
+      setAiMessages((prev) => [...prev, userMsg, assistantMsg].slice(-40));
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        setAiError(
+          'AI Study Coach timed out waiting for a response. Please try again. No daily messages were deducted.'
+        );
+      } else {
+        setAiError(
+          'Could not reach the AI Study Coach service. No daily messages were deducted.'
+        );
+      }
+    } finally {
+      window.clearTimeout(timeoutId);
+      setAiSending(false);
+    }
+  };
+
+  const handleAddSuggestedTask = (messageId: string, task: AiPlanTaskSuggestion) => {
+    const newTodo: TodoItem = {
+      id: `todo-ai-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      subjectId: task.subjectId || 'general',
+      title: task.title,
+      completed: false,
+      studyDayKey: task.studyDayKey || todayKey,
+      estimatedMinutes: task.estimatedMinutes,
+    };
+    setState((prev) => ({
+      ...prev,
+      todos: [newTodo, ...prev.todos],
+    }));
+    if (authUser) runCloudTask(() => upsertTodoDoc(authUser.uid, newTodo));
+
+    setAiMessages((prev) =>
+      prev.map((m) =>
+        m.id === messageId
+          ? {
+              ...m,
+              addedTaskIds: Array.from(new Set([...(m.addedTaskIds ?? []), task.id])),
+            }
+          : m
+      )
+    );
+  };
+
+  const handleAddAllSuggestedTasks = (
+    messageId: string,
+    tasks: AiPlanTaskSuggestion[]
+  ) => {
+    const msg = aiMessages.find((m) => m.id === messageId);
+    const alreadyAdded = new Set(msg?.addedTaskIds ?? []);
+    const toInsert = tasks.filter((t) => !alreadyAdded.has(t.id));
+    if (toInsert.length === 0) return;
+
+    const baseTs = Date.now();
+    const newTodos: TodoItem[] = toInsert.map((task, idx) => ({
+      id: `todo-ai-${baseTs}-${idx}`,
+      subjectId: task.subjectId || 'general',
+      title: task.title,
+      completed: false,
+      studyDayKey: task.studyDayKey || todayKey,
+      estimatedMinutes: task.estimatedMinutes,
+    }));
+
+    setState((prev) => ({
+      ...prev,
+      todos: [...newTodos, ...prev.todos],
+    }));
+
+    if (authUser) {
+      for (const todo of newTodos) {
+        runCloudTask(() => upsertTodoDoc(authUser.uid, todo));
+      }
+    }
+
+    setAiMessages((prev) =>
+      prev.map((m) =>
+        m.id === messageId
+          ? {
+              ...m,
+              addedTaskIds: Array.from(
+                new Set([...(m.addedTaskIds ?? []), ...toInsert.map((t) => t.id)])
+              ),
+            }
+          : m
+      )
+    );
+  };
+
   const handleSelectAccentTheme = (accentTheme: AccentTheme) => {
     if (accentTheme !== 'orange' && !soundsThemesUnlocked) {
       handleOpenUnlockModal('sounds_themes');
@@ -946,7 +1140,10 @@ export default function App() {
     <div className="h-screen overflow-hidden flex bg-[#F8F9FA] text-[#111827] dark:bg-[#0B0D11] dark:text-[#F3F4F6]">
       <Sidebar
         activeTab={activeTab}
-        onSelectTab={setActiveTab}
+        onSelectTab={(tab) => {
+          if (tab === 'vault') setVaultSubTab('challenges');
+          setActiveTab(tab);
+        }}
         theme={state.theme}
         onToggleTheme={handleToggleTheme}
         profile={state.profile}
@@ -972,10 +1169,6 @@ export default function App() {
           pinnedDDay={pinnedDDay}
           focusGuardEnabled={focusLockUnlocked && state.focusGuard.autoPauseOnTabSwitch}
           coins={state.wallet.coins}
-          widgetOpen={widgetMode !== 'closed'}
-          onToggleWidget={() => {
-            void handleToggleWidget();
-          }}
           onOpenVault={() => setActiveTab('vault')}
           onQuickStart={handleQuickStart}
         />
@@ -1021,6 +1214,36 @@ export default function App() {
               onDeleteTodo={handleDeleteTodo}
               onRolloverTodos={handleRolloverTodos}
               onLogManualSession={handleLogManualSession}
+              onOpenAiCoach={() => setActiveTab('ai')}
+            />
+          )}
+
+          {activeTab === 'ai' && (
+            <AiCoachView
+              todayKey={todayKey}
+              profile={state.profile}
+              subjects={state.subjects}
+              sessions={state.sessions}
+              todos={state.todos}
+              ddays={state.ddays}
+              wallet={state.wallet}
+              messages={aiMessages}
+              isSending={aiSending}
+              errorMessage={aiError}
+              onDismissError={() => setAiError('')}
+              onSendMessage={handleSendAiMessage}
+              onClearChat={() => {
+                setAiMessages([]);
+                setAiError('');
+              }}
+              onAddSuggestedTask={handleAddSuggestedTask}
+              onAddAllSuggestedTasks={handleAddAllSuggestedTasks}
+              onUnlockAiTier={handleUnlockAiTier}
+              onOpenVault={() => {
+                setVaultSubTab('vault');
+                setActiveTab('vault');
+              }}
+              onOpenPlanner={() => setActiveTab('planner')}
             />
           )}
 
@@ -1073,8 +1296,11 @@ export default function App() {
             <VaultView
               wallet={state.wallet}
               challenges={challenges}
+              initialSubTab={vaultSubTab}
               onClaimChallenge={handleClaimChallenge}
               onUnlockPack={handleUnlockPack}
+              onUnlockAiTier={handleUnlockAiTier}
+              onOpenAiCoach={() => setActiveTab('ai')}
             />
           )}
 
@@ -1124,7 +1350,6 @@ export default function App() {
           onCompleteSession={handleCompleteSession}
           onDiscardSession={handleDiscardSession}
           onRequestUnlock={handleOpenUnlockModal}
-          onTickFocusSeconds={setLiveFocusSeconds}
         />
       )}
 
@@ -1157,22 +1382,6 @@ export default function App() {
           onClose={() => setAuthError(null)}
         />
       )}
-
-      <DesktopWidgetController
-        mode={widgetMode}
-        pipContainer={pipContainer}
-        pipWindow={pipWindow}
-        state={state}
-        liveFocusSeconds={activeSubject ? liveFocusSeconds : 0}
-        activeSubject={activeSubject}
-        selectedDDayId={selectedWidgetDDayId}
-        onSelectDDayId={setSelectedWidgetDDayId}
-        onAddDDay={handleAddDDay}
-        onStartSubject={handleStartSubject}
-        onOpenQuickStart={handleQuickStart}
-        onToggleTheme={handleToggleTheme}
-        onClose={handleCloseWidget}
-      />
 
       <OfflineIndicator />
     </div>

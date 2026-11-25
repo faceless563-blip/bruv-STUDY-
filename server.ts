@@ -11,6 +11,11 @@ import {
   OrderStore,
   SERVER_STORE_OFFERS,
 } from './server/paymentService.ts';
+import {
+  AiCoachError,
+  generateStudyCoachPlan,
+  sanitizeChatInput,
+} from './server/aiCoachService.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -50,8 +55,8 @@ async function verifySslCommerzWithGateway(valId: string): Promise<Record<string
 
 async function startServer() {
   const app = express();
-  app.use(express.json());
-  app.use(express.urlencoded({ extended: true }));
+  app.use(express.json({ limit: '1mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
   // Public gateway status + authoritative BDT offers
   app.get('/api/payments/config', (_req, res) => {
@@ -323,6 +328,60 @@ async function startServer() {
     }
     res.json({ ok: true, grant: result.grant });
   });
+
+  // Server-side AI Study Coach endpoint (keeps GEMINI_API_KEY strictly on server)
+  app.post('/api/ai/plan-chat', async (req, res) => {
+    try {
+      const sanitized = sanitizeChatInput(req.body);
+      const result = await generateStudyCoachPlan(sanitized);
+      res.json({
+        ok: true,
+        reply: result.reply,
+        planSummary: result.planSummary,
+        suggestedTasks: result.suggestedTasks,
+      });
+    } catch (err) {
+      if (err instanceof AiCoachError) {
+        res.status(err.status).json({
+          ok: false,
+          code: err.code,
+          message: err.message,
+        });
+        return;
+      }
+      res.status(500).json({
+        ok: false,
+        code: 'AI_INTERNAL_ERROR',
+        message: 'Unexpected error generating study plan.',
+      });
+    }
+  });
+
+  // Ensure API routes never fall through to SPA HTML or Express HTML error pages
+  app.use('/api', (_req, res) => {
+    res.status(404).json({
+      ok: false,
+      code: 'API_NOT_FOUND',
+      message: 'API endpoint not found.',
+    });
+  });
+
+  app.use(
+    '/api',
+    (
+      err: { status?: number; message?: string },
+      _req: express.Request,
+      res: express.Response,
+      _next: express.NextFunction
+    ) => {
+      const status = typeof err?.status === 'number' && err.status >= 400 ? err.status : 500;
+      res.status(status).json({
+        ok: false,
+        code: 'API_REQUEST_ERROR',
+        message: err?.message || 'Unexpected API request error.',
+      });
+    }
+  );
 
   if (!isProduction) {
     const { createServer } = await import('vite');

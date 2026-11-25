@@ -15,6 +15,7 @@ import {
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import {
   AccentTheme,
+  AiTier,
   AppState,
   DDayTarget,
   FeaturePackId,
@@ -28,6 +29,7 @@ import {
   Subject,
   TodoItem,
 } from '../types/ypt';
+import { isValidAiTier } from '../utils/aiCoachLogic';
 
 const ALLOWED_PACK_IDS = new Set<FeaturePackId>([
   'focus_lock',
@@ -83,6 +85,9 @@ export interface WorkspaceDocPayload {
   claimedPeriodKeys: string[];
   accentTheme: AccentTheme;
   checkedInToday: boolean;
+  aiTier: AiTier;
+  aiUsageDayKey: string;
+  aiMessagesUsedToday: number;
   updatedAt: ReturnType<typeof serverTimestamp>;
 }
 
@@ -121,6 +126,11 @@ export function buildWorkspacePayload(uid: string, state: AppState): WorkspaceDo
       ? state.wallet.accentTheme
       : 'orange',
     checkedInToday: Boolean(state.checkedInToday),
+    aiTier: isValidAiTier(state.wallet.aiTier) ? state.wallet.aiTier : 'free',
+    aiUsageDayKey: /^\d{4}-\d{2}-\d{2}$/.test(state.wallet.aiUsageDayKey ?? '')
+      ? state.wallet.aiUsageDayKey
+      : '',
+    aiMessagesUsedToday: clampNumber(state.wallet.aiMessagesUsedToday ?? 0, 0, 1000),
     updatedAt: serverTimestamp(),
   };
 }
@@ -543,6 +553,9 @@ export function subscribeUserWorkspace(
               ? d.accentTheme
               : 'orange') as AccentTheme,
             purchaseHistory: [],
+            aiTier: isValidAiTier(d.aiTier) ? d.aiTier : 'free',
+            aiUsageDayKey: typeof d.aiUsageDayKey === 'string' ? d.aiUsageDayKey : '',
+            aiMessagesUsedToday: Number(d.aiMessagesUsedToday ?? 0),
           },
         });
       },
